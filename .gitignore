@@ -25,8 +25,12 @@ jobs.json
 video_renders.json
 tutor_sessions.json
 
-# Flutter build output
-frontend/build/
+# Flutter — exclude heavy build artifacts, keep compiled web output for serving
+frontend/build/android/
+frontend/build/ios/
+frontend/build/linux/
+frontend/build/macos/
+frontend/build/windows/
 
 # The old combined LMS app — stays on machine, never pushed
 LMSarresto1/

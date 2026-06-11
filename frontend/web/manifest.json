@@ -1,6 +1,6 @@
 {
-    "name": "lms_app",
-    "short_name": "lms_app",
+    "name": "lmsarresto",
+    "short_name": "lmsarresto",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
