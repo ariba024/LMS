@@ -12,6 +12,7 @@ GET   /api/v1/tutor/session/{session_id}/history         Full conversation histo
 
 import time
 
+import anthropic as _anthropic
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.config      import settings
@@ -187,17 +188,42 @@ def chat(
     engine  = _get_engine(vector_store, embedder, retrieval_pipeline, progress_tracker)
     try:
         reply = engine.chat(session, request.message, _session_store)
-    except Exception as exc:
-        err = str(exc)
-        if "credit balance" in err.lower() or "402" in err or "400" in err:
+    except _anthropic.AuthenticationError:
+        raise HTTPException(
+            status_code=503,
+            detail="Anthropic API authentication failed. Check that ANTHROPIC_API_KEY is valid.",
+        )
+    except _anthropic.PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Anthropic API credits exhausted or account suspended. "
+                "You can still use /quiz, /complete-lesson, /answer, and /next-lesson. "
+                f"API detail: {exc.message}"
+            ),
+        )
+    except _anthropic.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="Anthropic API rate limit reached. Please wait a moment and try again.",
+        )
+    except _anthropic.APIStatusError as exc:
+        # Catch billing errors that arrive as 400/402 with a credit-related message
+        is_billing = exc.status_code in (400, 402) and (
+            "credit" in str(exc).lower() or "billing" in str(exc).lower()
+        )
+        if is_billing:
             raise HTTPException(
                 status_code=402,
                 detail=(
-                    "Anthropic API credits exhausted. Chat requires a live API connection. "
-                    "You can still use /quiz, /complete-lesson, /answer, and /next-lesson without credits."
+                    "Anthropic API credits exhausted. "
+                    "You can still use /quiz, /complete-lesson, /answer, and /next-lesson."
                 ),
             )
-        raise
+        raise HTTPException(
+            status_code=502,
+            detail=f"Anthropic API error (HTTP {exc.status_code}): {exc.message}",
+        )
 
     return TutorChatResponse(
         session_id=session_id,

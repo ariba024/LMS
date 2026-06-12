@@ -587,16 +587,28 @@ Return ONLY a valid JSON object — no markdown fences, no commentary:
 
     # -- Claude call helpers ----------------------------------------------------
 
+    # ~4 chars per token; keep well under the 200k-token API limit.
+    _MAX_INPUT_CHARS = 600_000
+
     def _call(self, prompt: str, system: str = "", max_tokens: int = 4096) -> str:
+        system_text = system or (
+            "You are an expert instructional designer who transforms raw "
+            "document content into engaging, clear educational material. "
+            "You always return valid JSON when asked."
+        )
+        total_chars = len(prompt) + len(system_text)
+        if total_chars > self._MAX_INPUT_CHARS:
+            raise ValueError(
+                f"Prompt is too large for the Claude API: {total_chars:,} chars "
+                f"(≈{total_chars // 4:,} tokens). Reduce the source document size "
+                "or split the course into smaller sections."
+            )
+
         msgs = [{"role": "user", "content": prompt}]
         resp = self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
-            system=system or (
-                "You are an expert instructional designer who transforms raw "
-                "document content into engaging, clear educational material. "
-                "You always return valid JSON when asked."
-            ),
+            system=system_text,
             messages=msgs,
         )
         return resp.content[0].text

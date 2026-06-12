@@ -283,7 +283,16 @@ def _sync_ingest(
             try:
                 retrieval_pipeline.dual_index(result.chunks)
             except Exception as dual_exc:
-                print(f"[bge_index] WARNING: dual-index failed: {dual_exc}")
+                # MiniLM ingestion succeeded so the doc is usable, but advanced
+                # retrieval (BGE-m3 hybrid search) won't work for this document.
+                # Surface this as a warning in the job response so operators can
+                # re-index rather than silently degrading retrieval quality.
+                warning = (
+                    f"Document ingested (MiniLM) but BGE dual-index failed: {dual_exc}. "
+                    "Advanced retrieval may return lower-quality results for this file."
+                )
+                job.error = warning
+                print(f"[bge_index] WARNING: {warning}")
 
     except Exception as exc:
         job.status = "failed"
