@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
@@ -231,6 +232,7 @@ class CourseGenerator:
         instructions       : additional instructions injected into every Claude prompt
         use_knowledge_base : if True, lesson context search spans all docs in the store
         """
+        instructions = self._sanitize_instructions(instructions)
         print(f"[course_generator] Fetching chunks for '{source_file}' ...")
         chunks = self._store.get_all_by_source(source_file)
         if not chunks:
@@ -308,6 +310,7 @@ class CourseGenerator:
             { "type": "closing_slide", "title": "...", "narration": "..." }
           ]
         """
+        instructions = self._sanitize_instructions(instructions)
         print(f"[course_generator] [custom] Fetching chunks for '{source_file}' ...")
         chunks = self._store.get_all_by_source(source_file)
         if not chunks:
@@ -584,6 +587,25 @@ Return ONLY a valid JSON object — no markdown fences, no commentary:
             source_documents=[source_name],
             modules=modules,
         )
+
+    # -- Sanitization -----------------------------------------------------------
+
+    # Strip ASCII control chars (keep \n \r \t) to block prompt-injection via instructions.
+    _CTRL_CHAR_RE      = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+    _MAX_INSTRUCTIONS  = 2_000   # chars; truncate with a warning beyond this
+
+    @classmethod
+    def _sanitize_instructions(cls, text: str | None) -> str | None:
+        if not text:
+            return text
+        text = cls._CTRL_CHAR_RE.sub("", text)
+        if len(text) > cls._MAX_INSTRUCTIONS:
+            print(
+                f"[course_generator] WARNING: instructions truncated from "
+                f"{len(text)} to {cls._MAX_INSTRUCTIONS} chars."
+            )
+            text = text[: cls._MAX_INSTRUCTIONS]
+        return text.strip() or None
 
     # -- Claude call helpers ----------------------------------------------------
 

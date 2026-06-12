@@ -75,10 +75,39 @@ def _is_cache_valid(mp3_path: Path, narration: str) -> bool:
 
 
 def _write_cache(mp3_path: Path, audio_bytes: bytes, narration: str) -> None:
-    """Write MP3 bytes and its companion hash file atomically."""
+    """Write MP3 bytes and its companion hash file, then evict if over the size cap."""
     mp3_path.parent.mkdir(parents=True, exist_ok=True)
     mp3_path.write_bytes(audio_bytes)
     _hash_path(mp3_path).write_text(_narration_hash(narration), encoding="utf-8")
+    _evict_audio_cache(settings.audio_cache_max_mb)
+
+
+def _evict_audio_cache(max_mb: int) -> None:
+    """Delete oldest MP3s (and their .sha256 siblings) until total cache is under max_mb."""
+    base = settings.upload_dir / "audio"
+    if not base.exists():
+        return
+    entries: list[tuple[float, int, Path]] = []
+    for mp3 in base.rglob("*.mp3"):
+        try:
+            st = mp3.stat()
+            entries.append((st.st_mtime, st.st_size, mp3))
+        except OSError:
+            pass
+    total = sum(s for _, s, _ in entries)
+    limit = max_mb * 1024 * 1024
+    if total <= limit:
+        return
+    entries.sort()  # oldest mtime first
+    for _mtime, size, path in entries:
+        if total <= limit:
+            break
+        try:
+            path.unlink(missing_ok=True)
+            _hash_path(path).unlink(missing_ok=True)
+            total -= size
+        except OSError:
+            pass
 
 
 def _get_narration(course_script: dict, module_num: int, lesson_num: int) -> str | None:

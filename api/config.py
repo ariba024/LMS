@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     enable_ocr: bool = False
     ocr_lang:   str  = "eng"
 
+    # Audio cache — total disk cap across all courses (MB). Oldest files evicted first.
+    audio_cache_max_mb: int = 500
+
     # LLM model for course generation and video planning
     llm_model: str = "claude-sonnet-4-6"
 

@@ -15,6 +15,7 @@ All objects are stored in app.state and injected into routes via FastAPI
 dependency injection (see dependencies.py).
 """
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,6 +28,15 @@ from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, compat
 from api.schemas import HealthResponse
 
+# -- Logging setup --------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("arresto.api")
+
 
 # -- Lifespan -------------------------------------------------------------------
 
@@ -38,7 +48,7 @@ async def lifespan(app: FastAPI):
     from modules.content_ingestion.chunker      import Chunker
     from modules.content_ingestion.pipeline     import IngestionPipeline
 
-    print("[startup] Initialising Arresto LMS API ...")
+    logger.info("Initialising Arresto LMS API ...")
 
     # Database: create all SQLAlchemy-managed tables in lms.db
     from api.db import init_db
@@ -78,10 +88,9 @@ async def lifespan(app: FastAPI):
                 api_key=settings.sarvam_api_key,
                 language=settings.sarvam_language,
             )
-            print(f"[startup] Transcriber (Sarvam STT) ready "
-                  f"(language={settings.sarvam_language}).")
+            logger.info("Transcriber (Sarvam STT) ready (language=%s)", settings.sarvam_language)
         except Exception as exc:
-            print(f"[startup] WARNING: Transcriber failed to init: {exc}")
+            logger.warning("Transcriber failed to init: %s", exc)
 
     # TTS engine — Sarvam Bulbul-v3 (preferred) or OpenAI (fallback)
     app.state.tts_engine = None
@@ -90,9 +99,9 @@ async def lifespan(app: FastAPI):
             from modules.video.generators.sarvam_tts import SarvamTTSEngine
             tts_lang = settings.sarvam_language.lower()
             app.state.tts_engine = SarvamTTSEngine(lang=tts_lang)
-            print(f"[startup] TTS engine ready (Sarvam Bulbul-v3, lang={tts_lang}).")
+            logger.info("TTS engine ready (Sarvam Bulbul-v3, lang=%s)", tts_lang)
         except Exception as exc:
-            print(f"[startup] WARNING: Sarvam TTS engine failed to init: {exc}")
+            logger.warning("Sarvam TTS engine failed to init: %s", exc)
     elif settings.openai_api_key:
         try:
             from modules.tts import TTSEngine
@@ -101,18 +110,17 @@ async def lifespan(app: FastAPI):
                 model=settings.tts_model,
                 voice=settings.tts_voice,
             )
-            print(f"[startup] TTS engine ready "
-                  f"(OpenAI {settings.tts_model}, voice={settings.tts_voice}).")
+            logger.info("TTS engine ready (OpenAI %s, voice=%s)", settings.tts_model, settings.tts_voice)
         except ImportError:
-            print("[startup] WARNING: openai package not installed. "
-                  "Run: pip install openai>=1.0.0")
+            logger.warning("openai package not installed — run: pip install openai>=1.0.0")
         except Exception as exc:
-            print(f"[startup] WARNING: TTS engine failed to init: {exc}")
+            logger.warning("TTS engine failed to init: %s", exc)
 
-    # Intelligent retrieval pipeline (Phases 1-5: bge-m3 + BM25 + Reranker + Intent + Context)
+    # Progress tracker — writes to lms.db (same file as ORM tables)
     from modules.progress.tracker import ProgressTracker
-    app.state.progress_tracker = ProgressTracker()
-    print("[startup] Progress tracker initialised (progress.db).")
+    from modules.progress.store   import ProgressStore
+    app.state.progress_tracker = ProgressTracker(store=ProgressStore("lms.db"))
+    logger.info("Progress tracker initialised (lms.db)")
 
     app.state.retrieval_pipeline = None
     if settings.enable_retrieval_pipeline and settings.anthropic_api_key:
@@ -125,20 +133,23 @@ async def lifespan(app: FastAPI):
                 haiku_model=settings.haiku_model,
             )
         except Exception as exc:
-            print(f"[startup] WARNING: Retrieval pipeline failed to init: {exc}")
-            print("[startup]   Tutor will fall back to basic MiniLM retrieval.")
+            logger.warning("Retrieval pipeline failed to init: %s", exc)
+            logger.warning("  Tutor will fall back to basic MiniLM retrieval.")
     elif not settings.enable_retrieval_pipeline:
-        print("[startup] Retrieval pipeline disabled (ENABLE_RETRIEVAL_PIPELINE=false).")
+        logger.info("Retrieval pipeline disabled (ENABLE_RETRIEVAL_PIPELINE=false)")
     else:
-        print("[startup] Retrieval pipeline skipped — ANTHROPIC_API_KEY not set.")
+        logger.info("Retrieval pipeline skipped — ANTHROPIC_API_KEY not set")
 
     claude_status = "enabled" if settings.anthropic_api_key else "disabled (set ANTHROPIC_API_KEY)"
     rp_status = "enabled" if app.state.retrieval_pipeline else "disabled"
-    print(f"[startup] Ready -- {vs.count()} chunks in DB | Claude: {claude_status} | Retrieval pipeline: {rp_status}")
+    logger.info(
+        "Ready — %d chunks in DB | Claude: %s | Retrieval pipeline: %s",
+        vs.count(), claude_status, rp_status,
+    )
 
     yield  # <- server runs here
 
-    print("[shutdown] Arresto LMS API shutting down.")
+    logger.info("Arresto LMS API shutting down.")
 
 
 # -- App ------------------------------------------------------------------------
