@@ -25,12 +25,7 @@ jobs.json
 video_renders.json
 tutor_sessions.json
 
-# Flutter — exclude heavy build artifacts, keep compiled web output for serving
-frontend/build/android/
-frontend/build/ios/
-frontend/build/linux/
-frontend/build/macos/
-frontend/build/windows/
+# Flutter — exclude non-web build artifacts and tooling dirs; keep build/web for serving
 LMSarresto1/lmsarresto/build/android/
 LMSarresto1/lmsarresto/build/ios/
 LMSarresto1/lmsarresto/build/linux/

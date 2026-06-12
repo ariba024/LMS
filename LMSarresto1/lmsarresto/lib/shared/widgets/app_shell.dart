@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
-import '../../core/theme/typography.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/api/api_client.dart';
 
@@ -47,7 +46,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
         if (_tutorOpen)
           Positioned(
-            right: 24, bottom: 88,
+            right: 24, bottom: 92,
             child: _TutorPanel(onClose: () => setState(() => _tutorOpen = false)),
           ),
       ]),
@@ -87,23 +86,23 @@ class _Sidebar extends ConsumerWidget {
                 color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
           ]),
         ),
-        const Divider(color: AColors.sidebarDivider, height: 1),
+        const Divider(color: Color(0xFF2D2D2F), height: 1),
         Expanded(
           child: ListView(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12), children: [
             for (final section in navItems) ...[
               if (section.label != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
+                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
                   child: Text(section.label!,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                          color: Color(0xFF8A8A8E), letterSpacing: 1.0)),
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                          color: Color(0xFF6B6B6E), letterSpacing: 0.8)),
                 ),
               for (final item in section.items)
                 _SidebarItem(item: item, active: loc.startsWith(item.route)),
             ],
           ]),
         ),
-        const Divider(color: AColors.sidebarDivider, height: 1),
+        const Divider(color: Color(0xFF2D2D2F), height: 1),
         _SidebarFooter(),
       ]),
     );
@@ -120,7 +119,7 @@ class _SidebarItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(
-        color: active ? AColors.amber.withValues(alpha: 0.18) : Colors.transparent,
+        color: active ? AColors.amber.withValues(alpha: 0.15) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -133,7 +132,11 @@ class _SidebarItem extends StatelessWidget {
           },
           hoverColor: Colors.white.withValues(alpha: 0.05),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: active ? BoxDecoration(
+                border: Border(left: BorderSide(color: AColors.amber, width: 2.5)),
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(0), bottomLeft: Radius.circular(0))) : null,
             child: Row(children: [
               Icon(item.icon, size: 17,
                   color: active ? AColors.amber : const Color(0xFF8A8A8E)),
@@ -141,7 +144,7 @@ class _SidebarItem extends StatelessWidget {
               Expanded(child: Text(item.label,
                   style: TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w500,
-                      color: active ? Colors.white : const Color(0xFFBBBBBE)))),
+                      color: active ? AColors.amber : const Color(0xFFBBBBBE)))),
               if (item.badge != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -199,7 +202,6 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final loc = GoRouterState.of(context).matchedLocation;
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -208,7 +210,7 @@ class _Header extends ConsumerWidget {
         border: Border(bottom: BorderSide(color: AColors.cardBorder)),
       ),
       child: Row(children: [
-        Text(_routeTitle(loc), style: AText.h3()),
+        // Breadcrumb / page title comes from child — just show logo on mobile
         const Spacer(),
         // Role switcher pill
         Container(
@@ -265,33 +267,170 @@ class _RolePill extends StatelessWidget {
 
 // ── Tutor FAB + Panel ──────────────────────────────────────────────────────────
 
-class _TutorFab extends StatelessWidget {
+class _TutorFab extends StatefulWidget {
   const _TutorFab({required this.open, required this.onToggle});
   final bool open;
   final VoidCallback onToggle;
 
   @override
+  State<_TutorFab> createState() => _TutorFabState();
+}
+
+class _TutorFabState extends State<_TutorFab> with TickerProviderStateMixin {
+  late final AnimationController _entranceCtrl;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _entranceAnim;
+
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _entranceCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600))
+      ..forward();
+    _entranceAnim = CurvedAnimation(
+        parent: _entranceCtrl, curve: Curves.easeOutBack);
+    _pulseCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _entranceCtrl.dispose();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onToggle,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: AColors.ink, borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
+    final noAnim = MediaQuery.of(context).disableAnimations;
+
+    // Main button — rebuilt only when hover/press/open state changes
+    final mainBtn = AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      width: _hovered ? 160.0 : 56.0,
+      height: 56.0,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFF2B233), Color(0xFFC0461E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 24, height: 24,
-            decoration: const BoxDecoration(color: AColors.amber, shape: BoxShape.circle),
-            child: const Center(child: Text('AI', style: TextStyle(
-                fontSize: 9, fontWeight: FontWeight.w800, color: AColors.ink))),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF2B233).withValues(alpha: 0.45),
+            blurRadius: 20,
+            spreadRadius: 1,
+            offset: const Offset(0, 6),
           ),
-          const SizedBox(width: 8),
-          Text(open ? 'Close' : 'Arresto AI',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-        ]),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: Icon(
+                widget.open ? Icons.close_rounded : Icons.auto_awesome_rounded,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+            Expanded(
+              child: AnimatedOpacity(
+                opacity: _hovered ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    widget.open ? 'Close' : 'Arresto AI',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Wrap in pulse glow unless reduced-motion is requested
+    final Widget fab = noAnim
+        ? mainBtn
+        : AnimatedBuilder(
+            animation: _pulseCtrl,
+            child: mainBtn,
+            builder: (_, child) {
+              final t = _pulseCtrl.value; // 0→1→0 (breathing)
+              return Stack(
+                alignment: Alignment.centerRight,
+                clipBehavior: Clip.none,
+                children: [
+                  // Glow ring centred on the icon circle — layout-invisible
+                  IgnorePointer(
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFF2B233)
+                                .withValues(alpha: t * 0.5),
+                            blurRadius: 8 + t * 28,
+                            spreadRadius: t * 8,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  child!,
+                ],
+              );
+            },
+          );
+
+    return ScaleTransition(
+      scale: _entranceAnim,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onToggle,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: Semantics(
+            button: true,
+            label: 'Arresto AI',
+            child: AnimatedScale(
+              scale: _pressed ? 0.93 : (_hovered ? 1.05 : 1.0),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
+              child: fab,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -510,29 +649,6 @@ class _TutorSvcProxy {
     final data = await ApiClient.post('/api/v1/chat', {'question': question});
     return (data as Map<String, dynamic>)['answer'] as String? ?? 'Sorry, no answer available.';
   }
-}
-
-// ── Route → page title ────────────────────────────────────────────────────────
-
-String _routeTitle(String loc) {
-  if (loc.startsWith('/admin/generator'))                                  return 'Course Generator';
-  if (loc.startsWith('/admin/courses') && loc.split('/').length > 3)      return 'Course Detail';
-  if (loc.startsWith('/admin/courses'))                                    return 'All Courses';
-  if (loc.startsWith('/admin/learners'))                                   return 'Learners';
-  if (loc.startsWith('/admin/analytics'))                                  return 'Analytics';
-  if (loc.startsWith('/admin/support'))                                    return 'Support';
-  if (loc.startsWith('/admin/settings'))                                   return 'Settings';
-  if (loc.startsWith('/admin/studio'))                                     return 'Author Studio';
-  if (loc.startsWith('/admin'))                                            return 'Dashboard';
-  if (loc.startsWith('/learner/catalog') && loc.split('/').length > 3)    return 'Course Detail';
-  if (loc.startsWith('/learner/catalog'))                                  return 'Course Catalog';
-  if (loc.startsWith('/learner/lesson'))                                   return 'Lesson';
-  if (loc.startsWith('/learner/play'))                                     return 'Course Player';
-  if (loc.startsWith('/learner/assessments'))                              return 'Assessments';
-  if (loc.startsWith('/learner/certificates'))                             return 'Certificates';
-  if (loc.startsWith('/learner/support'))                                  return 'Help & Support';
-  if (loc.startsWith('/learner'))                                          return 'Dashboard';
-  return 'Arresto LMS';
 }
 
 // ── Navigation Data ────────────────────────────────────────────────────────────
