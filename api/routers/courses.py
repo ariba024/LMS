@@ -20,7 +20,7 @@ from api.dependencies import (
     generate_course_in_background,
     job_store,
 )
-from api.schemas import CourseGenerateRequest, CourseGenerateResponse, CourseJobStatus
+from api.schemas import CourseGenerateRequest, CourseGenerateResponse, CourseJobStatus, ErrorDetail
 
 router = APIRouter(prefix="/api/v1/courses", tags=["Course Generation"])
 
@@ -77,7 +77,8 @@ def _start_course_job(
     )
 
 
-@router.post("/generate", response_model=CourseGenerateResponse, status_code=202)
+@router.post("/generate", response_model=CourseGenerateResponse, status_code=202,
+             responses={404: {"model": ErrorDetail}, 503: {"model": ErrorDetail}})
 async def generate_course(
     request:          CourseGenerateRequest,
     background_tasks: BackgroundTasks,
@@ -112,7 +113,8 @@ async def generate_course(
     )
 
 
-@router.post("/generate-blueprint", response_model=CourseGenerateResponse, status_code=202)
+@router.post("/generate-blueprint", response_model=CourseGenerateResponse, status_code=202,
+             responses={404: {"model": ErrorDetail}, 503: {"model": ErrorDetail}})
 async def generate_course_from_blueprint(
     background_tasks:   BackgroundTasks,
     vector_store=Depends(get_vector_store),
@@ -157,7 +159,8 @@ async def generate_course_from_blueprint(
     )
 
 
-@router.get("/jobs/{job_id}", response_model=CourseJobStatus)
+@router.get("/jobs/{job_id}", response_model=CourseJobStatus,
+            responses={404: {"model": ErrorDetail}})
 def get_course_job(job_id: str):
     """
     Poll the status of a course generation job.

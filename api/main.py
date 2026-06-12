@@ -24,8 +24,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 from api.config import settings
-from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, compat
+from api.routers import documents, chat, courses, tutor, progress, audio, voice, video
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -181,7 +184,19 @@ app.include_router(progress.router)
 app.include_router(audio.router)
 app.include_router(voice.router)
 app.include_router(video.router)
-app.include_router(compat.router)   # Author Studio (GitHub frontend) compat layer
+
+
+# -- Global exception handler ---------------------------------------------------
+# Catches any unhandled Python exception that escapes a route handler and returns
+# a clean JSON 500 instead of leaking tracebacks to the client.
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again or contact support."},
+    )
 
 
 # -- Root & health --------------------------------------------------------------

@@ -7,6 +7,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+# -- Shared error model (used in OpenAPI responses= declarations) ---------------
+
+class ErrorDetail(BaseModel):
+    detail: str
+
+
 # -- Job / background task ------------------------------------------------------
 
 class JobStatus(BaseModel):

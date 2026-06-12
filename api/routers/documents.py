@@ -12,12 +12,15 @@ DELETE /api/v1/documents/{filename}              Remove a document from both vec
 """
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 
 from api.config import settings
+
+logger = logging.getLogger("arresto.documents")
 from api.dependencies import (
     get_pipeline, get_retrieval_pipeline, get_vector_store,
     _sync_ingest,
@@ -27,7 +30,7 @@ from api.schemas import (
     BatchFileResult, BatchUploadResponse,
     ChunkDetail, DeleteResponse, DocumentContentResponse,
     DocumentInfo, DocumentListResponse,
-    JobStatus, UploadResponse,
+    ErrorDetail, JobStatus, UploadResponse,
 )
 
 router = APIRouter(prefix="/api/v1/documents", tags=["Documents"])
@@ -66,7 +69,8 @@ def _build_content(filename: str, vector_store) -> DocumentContentResponse:
     )
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadResponse,
+             responses={400: {"model": ErrorDetail}, 500: {"model": ErrorDetail}})
 async def upload_document(
     file:               UploadFile = File(...),
     pipeline=Depends(get_pipeline),
@@ -179,7 +183,8 @@ async def batch_upload_documents(
     )
 
 
-@router.get("/jobs/{job_id}", response_model=JobStatus)
+@router.get("/jobs/{job_id}", response_model=JobStatus,
+            responses={404: {"model": ErrorDetail}})
 def get_upload_job(job_id: str):
     """Poll the status of an upload/ingestion job."""
     job = job_store.get_upload(job_id)
@@ -204,7 +209,8 @@ def list_documents(vector_store=Depends(get_vector_store)):
     return DocumentListResponse(documents=docs, total=len(docs))
 
 
-@router.get("/{filename}/content", response_model=DocumentContentResponse)
+@router.get("/{filename}/content", response_model=DocumentContentResponse,
+            responses={404: {"model": ErrorDetail}})
 def get_document_content(filename: str, vector_store=Depends(get_vector_store)):
     """
     Return the full extracted text for a document, split into chunks.
@@ -277,7 +283,8 @@ def list_available_files(vector_store=Depends(get_vector_store)):
     return {"files": files, "total": len(files)}
 
 
-@router.post("/ingest/{filename}", response_model=UploadResponse)
+@router.post("/ingest/{filename}", response_model=UploadResponse,
+             responses={404: {"model": ErrorDetail}, 400: {"model": ErrorDetail}, 500: {"model": ErrorDetail}})
 async def ingest_existing_file(
     filename:           str,
     pipeline=Depends(get_pipeline),
@@ -327,7 +334,8 @@ async def ingest_existing_file(
     )
 
 
-@router.delete("/{filename}", response_model=DeleteResponse)
+@router.delete("/{filename}", response_model=DeleteResponse,
+               responses={404: {"model": ErrorDetail}})
 def delete_document(
     filename:           str,
     vector_store=Depends(get_vector_store),
@@ -346,7 +354,7 @@ def delete_document(
         try:
             retrieval_pipeline.delete_source(filename)
         except Exception as exc:
-            print(f"[bge_index] WARNING: BGE delete failed: {exc}")
+            logger.warning("BGE index delete failed for '%s': %s", filename, exc)
 
     upload_path = settings.upload_dir / filename
     if upload_path.exists():
