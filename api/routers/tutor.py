@@ -45,6 +45,7 @@ def _get_engine(vector_store, embedder, retrieval_pipeline=None, progress_tracke
         api_key=settings.anthropic_api_key,
         vector_store=vector_store,
         embedder=embedder,
+        model=settings.llm_model,
         retrieval_pipeline=retrieval_pipeline,
         progress_tracker=progress_tracker,
     )

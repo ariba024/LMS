@@ -435,12 +435,20 @@ Rules:
         print(f"[course_generator] [text→micro] Single-call micro-course "
               f"({len(content_text)} chars) ...")
 
+        if len(content_text) > 9000:
+            print(
+                f"[course_generator] WARNING: content_text truncated from "
+                f"{len(content_text)} to 9000 chars for micro-course generation. "
+                "Pass a shorter source or split into multiple courses."
+            )
+        _content = content_text[:9000]
+
         prompt = f"""You are an expert instructional designer.
 Create a structured educational course from the SOURCE CONTENT below.
 The content already defines the lesson sections and quiz questions — extract them faithfully.
 
 SOURCE CONTENT:
-{content_text[:9000]}
+{_content}
 
 TARGET AUDIENCE: {target_audience}
 
@@ -594,13 +602,44 @@ Return ONLY a valid JSON object — no markdown fences, no commentary:
         return resp.content[0].text
 
     def _parse_json(self, text: str) -> dict:
-        """Extract JSON from a response that may have markdown fences."""
+        """Extract and parse JSON from a response that may be wrapped in markdown fences."""
         text = text.strip()
+
+        # Fast path: response is already clean JSON
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Strip markdown fences (```json...``` or ```...```)
         if "```" in text:
-            start = text.find("{", text.find("```"))
-            end   = text.rfind("}") + 1
-            text  = text[start:end]
-        return json.loads(text)
+            for fence in ("```json", "```"):
+                if fence in text:
+                    after_fence = text[text.index(fence) + len(fence):]
+                    end = after_fence.find("```")
+                    candidate = after_fence[:end].strip() if end != -1 else after_fence.strip()
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+
+        # Last resort: find the outermost {...} in the response
+        start = text.find("{")
+        end   = text.rfind("}") + 1
+        if start != -1 and end > start:
+            try:
+                return json.loads(text[start:end])
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Could not parse JSON from model response. "
+                    f"Parse error: {exc}. "
+                    f"Response (first 300 chars): {text[:300]!r}"
+                ) from exc
+
+        raise ValueError(
+            f"No JSON object found in model response. "
+            f"Response (first 300 chars): {text[:300]!r}"
+        )
 
     # -- Relevant chunk retrieval -----------------------------------------------
 

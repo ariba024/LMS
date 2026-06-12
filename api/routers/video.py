@@ -16,9 +16,13 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from api.config import settings
 from api.course_library import library
 from modules.video.job_store import video_job_store
 from modules.video.render_engine import render_item_in_background, render_lesson_in_background
+
+# Styles that require a HeyGen API key — must match render_engine._HEYGEN_STYLES
+_HEYGEN_STYLES = frozenset({"animated_scene", "whiteboard_doodle", "hybrid"})
 
 router = APIRouter(prefix="/api/v1/video", tags=["Video Rendering"])
 
@@ -160,6 +164,15 @@ async def render_video(
             400,
             "Provide either (module_number + lesson_number) for standard courses "
             "or item_index for custom/blueprint courses.",
+        )
+
+    # ── Validate HeyGen key before accepting the job ────────────────────────────
+    if request.style in _HEYGEN_STYLES and not settings.heygen_api_key:
+        raise HTTPException(
+            400,
+            f"Style '{request.style}' requires a HeyGen API key. "
+            "Set HEYGEN_API_KEY in your .env file, or choose a free style: "
+            "modern, flatcolor, whiteboard.",
         )
 
     # ── Create job + queue background task ──────────────────────────────────────

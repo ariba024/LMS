@@ -331,7 +331,10 @@ def _sync_generate_course(
     job.status = "processing"
     job_store._persist_course(job)
     try:
-        gen = CourseGenerator(vector_store=vector_store, api_key=api_key, embedder=embedder)
+        gen = CourseGenerator(
+            vector_store=vector_store, api_key=api_key,
+            embedder=embedder, model=settings.llm_model,
+        )
 
         if course_format == "custom":
             if not instructions:
@@ -359,8 +362,6 @@ def _sync_generate_course(
                 use_knowledge_base=use_knowledge_base,
             )
         job.course_script = script.to_dict()
-        job.status        = "completed"
-        job_store._persist_course(job)
 
         try:
             from api.course_library import library as _lib
@@ -374,7 +375,12 @@ def _sync_generate_course(
                 use_knowledge_base=use_knowledge_base,
             )
         except Exception as _lib_exc:
-            print(f"[course_library] WARNING: failed to save to library: {_lib_exc}")
+            raise RuntimeError(
+                f"Course generated but could not be saved to library: {_lib_exc}"
+            ) from _lib_exc
+
+        job.status = "completed"
+        job_store._persist_course(job)
     except Exception as exc:
         job.status = "failed"
         job.error  = str(exc)
@@ -416,7 +422,10 @@ def _sync_generate_from_text(
     job.status = "processing"
     job_store._persist_course(job)
     try:
-        gen = CourseGenerator(vector_store=vector_store, api_key=api_key, embedder=embedder)
+        gen = CourseGenerator(
+            vector_store=vector_store, api_key=api_key,
+            embedder=embedder, model=settings.llm_model,
+        )
 
         def _on_lesson_done(done: int, total: int) -> None:
             job.completed_lessons = done
@@ -426,8 +435,6 @@ def _sync_generate_from_text(
         script = gen.generate_from_text(content_text=content_text, mode=mode,
                                         progress_callback=_on_lesson_done)
         job.course_script = script.to_dict()
-        job.status        = "completed"
-        job_store._persist_course(job)
 
         try:
             from api.course_library import library as _lib
@@ -437,7 +444,12 @@ def _sync_generate_from_text(
                 course_script=job.course_script, instructions=None, use_knowledge_base=False,
             )
         except Exception as _lib_exc:
-            print(f"[course_library] WARNING: failed to save to library: {_lib_exc}")
+            raise RuntimeError(
+                f"Course generated but could not be saved to library: {_lib_exc}"
+            ) from _lib_exc
+
+        job.status = "completed"
+        job_store._persist_course(job)
     except Exception as exc:
         job.status = "failed"
         job.error  = str(exc)
@@ -476,11 +488,13 @@ def _sync_generate_micro_from_text(
     job.status = "processing"
     job_store._persist_course(job)
     try:
-        gen = CourseGenerator(vector_store=vector_store, api_key=api_key, embedder=embedder)
+        gen = CourseGenerator(
+            vector_store=vector_store, api_key=api_key,
+            embedder=embedder, model=settings.llm_model,
+        )
         script = gen.generate_micro_course_from_text(content_text=content_text)
         job.course_script = script.to_dict()
-        job.status        = "completed"
-        job_store._persist_course(job)
+
         try:
             from api.course_library import library as _lib
             _lib.save(
@@ -489,7 +503,12 @@ def _sync_generate_micro_from_text(
                 course_script=job.course_script, instructions=None, use_knowledge_base=False,
             )
         except Exception as _lib_exc:
-            print(f"[course_library] WARNING: failed to save to library: {_lib_exc}")
+            raise RuntimeError(
+                f"Course generated but could not be saved to library: {_lib_exc}"
+            ) from _lib_exc
+
+        job.status = "completed"
+        job_store._persist_course(job)
     except Exception as exc:
         job.status = "failed"
         job.error  = str(exc)

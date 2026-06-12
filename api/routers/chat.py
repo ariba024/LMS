@@ -63,7 +63,7 @@ def _generate_answer(question: str, chunks: list[dict], api_key: str) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.llm_model,
         max_tokens=1024,
         system=_SYSTEM_PROMPT,
         messages=[{
@@ -136,5 +136,5 @@ async def chat(
         question=request.question,
         answer=answer,
         sources=sources,
-        model_used="claude-sonnet-4-6",
+        model_used=settings.llm_model,
     )
