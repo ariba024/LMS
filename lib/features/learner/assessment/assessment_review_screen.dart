@@ -16,22 +16,22 @@ class AssessmentReviewScreen extends ConsumerWidget {
     final state = ref.watch(assessmentProvider);
     final questions = ref.watch(questionsProvider);
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      appBar: AppBar(
-        backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
-        title: Text('Review Answers', style: ArrestoText.h4()),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
+    return Column(
+      children: [
+        AppBar(
+          backgroundColor: ArrestoColors.surface,
+          foregroundColor: ArrestoColors.ink,
+          title: Text('Review Answers', style: ArrestoText.h4()),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.pop(),
+          ),
         ),
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(20),
-        itemCount: questions.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (ctx, i) {
+        Expanded(child: ListView.separated(
+          padding: const EdgeInsets.all(20),
+          itemCount: questions.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 14),
+          itemBuilder: (ctx, i) {
           final q = questions[i];
           final selected = state.answers[i];
           final isCorrect = selected == q.a;
@@ -158,7 +158,8 @@ class AssessmentReviewScreen extends ConsumerWidget {
             ),
           );
         },
-      ),
+        )),
+      ],
     );
   }
 }

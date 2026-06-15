@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/chat_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_header.dart';
@@ -27,29 +28,32 @@ class _ArrestoAiScreenState extends ConsumerState<ArrestoAiScreen> {
     '🏗️ When is fall protection required?',
   ];
 
-  static const _responses = {
-    'anchor': 'Anchor points must be capable of supporting at least **5,000 lbs (22 kN)** per attached worker, as required by OSHA 1926.502. The anchor must be independent from any anchor used to support or suspend platforms.',
-    'harness': 'Before each use, inspect the harness for:\n• **Webbing** — cuts, fraying, burns, or chemical damage\n• **D-rings** — cracks, sharp edges, corrosion\n• **Buckles** — proper operation, no cracks\n• **Stitching** — broken or missing stitches\n• **Labels** — legible and intact\n\nRemove from service immediately if any defect is found.',
-    'free': 'OSHA limits free-fall to a maximum of **6 feet (1.8 m)** for personal fall arrest systems. The total fall distance (free-fall + deceleration distance + body height) must be calculated to ensure you won\'t hit a lower level.',
-    'required': 'Fall protection is required when workers are exposed to falls of **6 feet or more** in construction (OSHA 1926.502) or **4 feet** in general industry (OSHA 1910.23). Always follow your site\'s specific safety plan.',
-    'default': 'Great question! This relates to core fall protection principles covered in the Working at Heights course. The key principle is always to eliminate the hazard first, then use passive protection, then fall restraint, and finally fall arrest as a last resort. Would you like me to point you to the specific lesson?',
-  };
-
   void _send([String? text]) async {
     final msg = (text ?? _ctrl.text).trim();
     if (msg.isEmpty) return;
     _ctrl.clear();
-    setState(() => _messages.add(_Msg(true, msg)));
+    setState(() {
+      _messages.add(_Msg(true, msg));
+      _typing = true;
+    });
     _scrollDown();
-    setState(() => _typing = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    final lower = msg.toLowerCase();
-    String reply = _responses['default']!;
-    for (final k in _responses.keys) {
-      if (lower.contains(k)) { reply = _responses[k]!; break; }
+    try {
+      final answer = await ChatService.ask(msg);
+      if (!mounted) return;
+      setState(() {
+        _typing = false;
+        _messages.add(_Msg(false, answer));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _typing = false;
+        _messages.add(_Msg(false,
+            'Sorry, I could not reach the AI right now. '
+            'Please check that the backend is running and try again.',
+            isError: true));
+      });
     }
-    setState(() { _typing = false; _messages.add(_Msg(false, reply)); });
     _scrollDown();
   }
 
@@ -64,9 +68,7 @@ class _ArrestoAiScreenState extends ConsumerState<ArrestoAiScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: Column(children: [
+    return Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: SectionHeader(
@@ -90,15 +92,15 @@ class _ArrestoAiScreenState extends ConsumerState<ArrestoAiScreen> {
           ),
         ),
         _InputBar(ctrl: _ctrl, onSend: _send),
-      ]),
-    );
+      ]);
   }
 }
 
 class _Msg {
   final bool isUser;
   final String text;
-  _Msg(this.isUser, this.text);
+  final bool isError;
+  _Msg(this.isUser, this.text, {this.isError = false});
 }
 
 class _ChatBubble extends StatelessWidget {
@@ -125,7 +127,11 @@ class _ChatBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: msg.isUser ? ArrestoColors.amber : ArrestoColors.surface,
+                color: msg.isUser
+                    ? ArrestoColors.amber
+                    : msg.isError
+                        ? ArrestoColors.redSoft
+                        : ArrestoColors.surface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
@@ -134,7 +140,13 @@ class _ChatBubble extends StatelessWidget {
                 ),
                 border: msg.isUser ? null : Border.all(color: ArrestoColors.cardBorder),
               ),
-              child: Text(msg.text, style: ArrestoText.body(color: msg.isUser ? ArrestoColors.ink : ArrestoColors.textPrimary)),
+              child: Text(msg.text,
+                  style: ArrestoText.body(
+                      color: msg.isUser
+                          ? ArrestoColors.ink
+                          : msg.isError
+                              ? ArrestoColors.red
+                              : ArrestoColors.textPrimary)),
             ),
           ),
           if (msg.isUser) const SizedBox(width: 8),
