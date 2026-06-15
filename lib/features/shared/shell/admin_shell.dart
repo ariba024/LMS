@@ -5,6 +5,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import 'app_header.dart';
+import '../arresto_ai/arresto_ai_panel.dart';
 
 class AdminShell extends ConsumerWidget {
   final Widget child;
@@ -16,6 +17,8 @@ class AdminShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
+      floatingActionButton: const _AIFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(
         children: [
           const AppHeader(),
@@ -29,6 +32,36 @@ class AdminShell extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AIFab extends StatelessWidget {
+  const _AIFab();
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      backgroundColor: ArrestoColors.ink,
+      onPressed: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => const ArrestoAIPanel(),
+      ),
+      icon: Container(
+        width: 22,
+        height: 22,
+        decoration: const BoxDecoration(
+          color: ArrestoColors.amber,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.auto_awesome_rounded,
+            size: 13, color: ArrestoColors.ink),
+      ),
+      label: Text('Arresto AI',
+          style: ArrestoText.small(color: Colors.white)
+              .copyWith(fontWeight: FontWeight.w600)),
     );
   }
 }
