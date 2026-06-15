@@ -117,12 +117,29 @@ class CourseGenerateRequest(BaseModel):
     instructions:       str | None = Field(None, description="Additional instructions for the content generator (tone, focus areas, special requirements)")
     use_knowledge_base: bool       = Field(False, description="Enrich lesson context with semantically relevant chunks from all documents in the knowledge base, not just the source file")
     course_format:      str        = Field("standard", description="'standard' = auto-generated module/lesson structure; 'custom' = follow instructions as an exact blueprint (supports quizzes, specific slide counts, non-English languages, etc.)")
+    language:           str        = Field("English", description="Language for all course content — e.g. 'English', 'Hindi', 'Spanish'")
+    duration_range:     str        = Field("60-90 minutes", description="Target course duration: '30-45 minutes', '60-90 minutes', '2-3 hours', '3+ hours'")
 
 
 class CourseGenerateResponse(BaseModel):
     job_id:  str
     status:  str
     message: str
+
+
+class AssessmentConfigRequest(BaseModel):
+    num_questions: int = Field(5,  ge=1, le=50,  description="Number of quiz questions")
+    pass_pct:      int = Field(70, ge=1, le=100, description="Pass percentage required")
+    time_min:      int = Field(30, ge=1,          description="Time limit in minutes")
+    retakes:       int = Field(3,  ge=0,          description="Number of retake attempts allowed")
+
+
+class PublishRequest(BaseModel):
+    published:        bool = Field(True,    description="True = publish, False = revert to draft")
+    publish_mode:     str  = Field("now",   description="'now' | 'draft' | 'scheduled'")
+    notify_learners:  bool = Field(True)
+    require_completion: bool = Field(True)
+    assign_to:        str  = Field("all",   description="'all' | 'groups' | 'none'")
 
 
 class CourseJobStatus(BaseModel):

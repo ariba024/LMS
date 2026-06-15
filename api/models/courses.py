@@ -30,3 +30,12 @@ class CourseScriptRow(Base):
     estimated_duration_min: Mapped[int]     = Column(Integer, nullable=False, default=0)
     # Full course dict — stored as JSON text
     course_script_json:  Mapped[str]        = Column(String, nullable=False)
+    # Generation settings (added post-launch — migrated at startup via init_db)
+    language:                  Mapped[str]  = Column(String, nullable=False, default="English")
+    difficulty:                Mapped[str]  = Column(String, nullable=False, default="")
+    published:                 Mapped[bool] = Column(Boolean, nullable=False, default=False)
+    # Assessment configuration set by admin in the generator wizard
+    assessment_num_questions:  Mapped[int]  = Column(Integer, nullable=False, default=5)
+    assessment_pass_pct:       Mapped[int]  = Column(Integer, nullable=False, default=70)
+    assessment_time_min:       Mapped[int]  = Column(Integer, nullable=False, default=30)
+    assessment_retakes:        Mapped[int]  = Column(Integer, nullable=False, default=3)

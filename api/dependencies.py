@@ -123,26 +123,46 @@ class JobStore:
             from api.models.jobs import UploadJobRow, CourseJobRow
             with SessionLocal() as db:
                 for row in db.query(UploadJobRow).all():
+                    # Any upload job that was still 'processing' when the server
+                    # last shut down is a ghost — mark it failed so callers don't
+                    # wait on it forever.
+                    status = row.status
+                    error  = row.error
+                    if status == "processing":
+                        status = "failed"
+                        error  = "Server restarted while job was running. Please try again."
+                        row.status = status
+                        row.error  = error
+                        db.add(row)
                     self._uploads[row.job_id] = _UploadJob(
                         job_id=row.job_id,
                         filename=row.filename,
-                        status=row.status,
-                        error=row.error,
+                        status=status,
+                        error=error,
                         chunks_created=row.chunks_created,
                         started_at=row.started_at,
                         finished_at=row.finished_at,
                     )
                 for row in db.query(CourseJobRow).all():
+                    status = row.status
+                    error  = row.error
+                    if status == "processing":
+                        status = "failed"
+                        error  = "Server restarted while job was running. Please try again."
+                        row.status = status
+                        row.error  = error
+                        db.add(row)
                     self._courses[row.job_id] = _CourseJob(
                         job_id=row.job_id,
                         source_file=row.source_file,
-                        status=row.status,
-                        error=row.error,
+                        status=status,
+                        error=error,
                         course_script=json.loads(row.course_script_json) if row.course_script_json else None,
                         started_at=row.started_at,
                         total_lessons=row.total_lessons,
                         completed_lessons=row.completed_lessons,
                     )
+                db.commit()
         except Exception as exc:
             print(f"[job_store] WARNING: could not load from DB: {exc}")
 
@@ -329,6 +349,8 @@ def _sync_generate_course(
     instructions:       str | None = None,
     use_knowledge_base: bool = False,
     course_format:      str = "standard",
+    language:           str = "English",
+    duration_range:     str = "60-90 minutes",
 ) -> None:
     import sys, io as _io
     _captured   = _io.StringIO()
@@ -355,6 +377,7 @@ def _sync_generate_course(
                 instructions=instructions,
                 course_title=course_title,
                 target_audience=target_audience,
+                language=language,
             )
         else:
             def _on_lesson_done(done: int, total: int) -> None:
@@ -369,11 +392,19 @@ def _sync_generate_course(
                 progress_callback=_on_lesson_done,
                 instructions=instructions,
                 use_knowledge_base=use_knowledge_base,
+                language=language,
+                duration_range=duration_range,
             )
         job.course_script = script.to_dict()
 
         try:
             from api.course_library import library as _lib
+            import re as _re
+            _difficulty = ""
+            if instructions:
+                _m = _re.search(r"Difficulty level:\s*(\w+)", instructions, _re.IGNORECASE)
+                if _m:
+                    _difficulty = _m.group(1).strip()
             _lib.save(
                 script_id=job.job_id,
                 source_file=job.source_file,
@@ -382,11 +413,33 @@ def _sync_generate_course(
                 course_script=job.course_script,
                 instructions=instructions,
                 use_knowledge_base=use_knowledge_base,
+                language=language,
+                difficulty=_difficulty,
             )
         except Exception as _lib_exc:
-            raise RuntimeError(
-                f"Course generated but could not be saved to library: {_lib_exc}"
-            ) from _lib_exc
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "course_library.save FAILED for job %s: %s", job.job_id, _lib_exc, exc_info=True,
+            )
+            # Retry once — transient DB lock or session expiry
+            try:
+                _lib.save(
+                    script_id=job.job_id,
+                    source_file=job.source_file,
+                    course_title=script.course_title,
+                    target_audience=target_audience,
+                    course_script=job.course_script,
+                    instructions=instructions,
+                    use_knowledge_base=use_knowledge_base,
+                    language=language,
+                    difficulty=_difficulty,
+                )
+            except Exception as _lib_exc2:
+                _logging.getLogger(__name__).error(
+                    "course_library.save retry also FAILED for job %s: %s",
+                    job.job_id, _lib_exc2, exc_info=True,
+                )
+                job.error = f"Script generated but library save failed: {_lib_exc2}"
 
         job.status = "completed"
         job_store._persist_course(job)
@@ -410,10 +463,12 @@ async def generate_course_in_background(
     job: _CourseJob, vector_store: Any, api_key: str, course_title: str | None,
     target_audience: str, embedder: Any = None, instructions: str | None = None,
     use_knowledge_base: bool = False, course_format: str = "standard",
+    language: str = "English", duration_range: str = "60-90 minutes",
 ) -> None:
     await asyncio.to_thread(
         _sync_generate_course, job, vector_store, api_key, course_title,
         target_audience, embedder, instructions, use_knowledge_base, course_format,
+        language, duration_range,
     )
 
 

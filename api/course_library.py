@@ -37,6 +37,8 @@ class CourseLibrary:
         course_script:      dict,
         instructions:       str | None = None,
         use_knowledge_base: bool = False,
+        language:           str = "English",
+        difficulty:         str = "",
     ) -> dict:
         """
         Persist a completed course script.
@@ -64,19 +66,43 @@ class CourseLibrary:
             if row is None:
                 row = CourseScriptRow(script_id=script_id)
                 db.add(row)
-            row.source_file          = source_file
-            row.course_title         = course_title
-            row.target_audience      = target_audience
-            row.instructions         = instructions
-            row.use_knowledge_base   = use_knowledge_base
-            row.generated_at         = generated_at
-            row.total_lessons        = total_lessons
+            row.source_file            = source_file
+            row.course_title           = course_title
+            row.target_audience        = target_audience
+            row.instructions           = instructions
+            row.use_knowledge_base     = use_knowledge_base
+            row.generated_at           = generated_at
+            row.total_lessons          = total_lessons
             row.estimated_duration_min = duration_min
-            row.course_script_json   = json.dumps(course_script, ensure_ascii=False)
+            row.course_script_json     = json.dumps(course_script, ensure_ascii=False)
+            row.language               = language
+            row.difficulty             = difficulty
             db.commit()
+            # Build the return dict from the values we just wrote rather than
+            # accessing ORM attributes after commit (expire_on_commit=True marks
+            # them stale and a refresh/lazy-load could raise DetachedInstanceError
+            # if the underlying connection is recycled).
+            entry = {
+                "script_id":                script_id,
+                "source_file":              source_file,
+                "course_title":             course_title,
+                "target_audience":          target_audience,
+                "instructions":             instructions,
+                "use_knowledge_base":       use_knowledge_base,
+                "generated_at":             generated_at,
+                "total_lessons":            total_lessons,
+                "estimated_duration_min":   duration_min,
+                "language":                 language,
+                "difficulty":               difficulty,
+                "published":                False,
+                "assessment_num_questions": 5,
+                "assessment_pass_pct":      70,
+                "assessment_time_min":      30,
+                "assessment_retakes":       3,
+            }
 
-        print(f"[course_library] Saved '{course_title}' ({total_lessons} lessons) → lms.db")
-        return self._row_to_index_entry(row)
+        print(f"[course_library] Saved '{course_title}' ({total_lessons} lessons) -> lms.db")
+        return entry
 
     def list_all(self) -> list[dict]:
         """Return all index entries (no script body), newest first."""
@@ -85,7 +111,10 @@ class CourseLibrary:
         from sqlalchemy import desc
         with SessionLocal() as db:
             rows = db.query(CourseScriptRow).order_by(desc(CourseScriptRow.generated_at)).all()
-        return [self._row_to_index_entry(r) for r in rows]
+            # Build plain dicts while the session is still open; reading row
+            # attributes after the with-block exits raises DetachedInstanceError.
+            entries = [self._row_to_index_entry(r) for r in rows]
+        return entries
 
     def get(self, script_id: str) -> dict | None:
         """Return the full record including course_script dict, or None."""
@@ -93,10 +122,11 @@ class CourseLibrary:
         from api.models.courses import CourseScriptRow
         with SessionLocal() as db:
             row = db.get(CourseScriptRow, script_id)
-        if row is None:
-            return None
-        entry = self._row_to_index_entry(row)
-        entry["course_script"] = json.loads(row.course_script_json)
+            if row is None:
+                return None
+            # Read all attributes inside the session to avoid DetachedInstanceError.
+            entry = self._row_to_index_entry(row)
+            entry["course_script"] = json.loads(row.course_script_json)
         return entry
 
     def update(
@@ -116,12 +146,47 @@ class CourseLibrary:
             if course_title is not None:
                 row.course_title = course_title
             db.commit()
-            # Re-fetch within the session so we return consistent data
+            # Refresh then read inside the session — once the with-block exits
+            # the object is detached and attribute access would raise.
             db.refresh(row)
+            entry = self._row_to_index_entry(row)
+            entry["course_script"] = course_script
         print(f"[course_library] Updated script '{script_id}'.")
-        entry = self._row_to_index_entry(row)
-        entry["course_script"] = course_script
         return entry
+
+    def save_assessment_config(
+        self,
+        script_id:     str,
+        num_questions: int = 5,
+        pass_pct:      int = 70,
+        time_min:      int = 30,
+        retakes:       int = 3,
+    ) -> bool:
+        """Persist assessment configuration for a course. Returns False if not found."""
+        from api.db import SessionLocal
+        from api.models.courses import CourseScriptRow
+        with SessionLocal() as db:
+            row = db.get(CourseScriptRow, script_id)
+            if row is None:
+                return False
+            row.assessment_num_questions = num_questions
+            row.assessment_pass_pct      = pass_pct
+            row.assessment_time_min      = time_min
+            row.assessment_retakes       = retakes
+            db.commit()
+        return True
+
+    def publish(self, script_id: str, published: bool = True) -> bool:
+        """Mark a course as published or draft. Returns False if not found."""
+        from api.db import SessionLocal
+        from api.models.courses import CourseScriptRow
+        with SessionLocal() as db:
+            row = db.get(CourseScriptRow, script_id)
+            if row is None:
+                return False
+            row.published = published
+            db.commit()
+        return True
 
     def delete(self, script_id: str) -> bool:
         """Delete a script. Returns True if it existed."""
@@ -141,15 +206,22 @@ class CourseLibrary:
     def _row_to_index_entry(row: Any) -> dict:
         """Convert an ORM row to the dict shape the rest of the codebase expects."""
         return {
-            "script_id":              row.script_id,
-            "source_file":            row.source_file,
-            "course_title":           row.course_title,
-            "target_audience":        row.target_audience,
-            "instructions":           row.instructions,
-            "use_knowledge_base":     row.use_knowledge_base,
-            "generated_at":           row.generated_at,
-            "total_lessons":          row.total_lessons,
-            "estimated_duration_min": row.estimated_duration_min,
+            "script_id":                   row.script_id,
+            "source_file":                 row.source_file,
+            "course_title":                row.course_title,
+            "target_audience":             row.target_audience,
+            "instructions":                row.instructions,
+            "use_knowledge_base":          row.use_knowledge_base,
+            "generated_at":                row.generated_at,
+            "total_lessons":               row.total_lessons,
+            "estimated_duration_min":      row.estimated_duration_min,
+            "language":                    getattr(row, "language",   "English"),
+            "difficulty":                  getattr(row, "difficulty",  ""),
+            "published":                   getattr(row, "published",   False),
+            "assessment_num_questions":    getattr(row, "assessment_num_questions", 5),
+            "assessment_pass_pct":         getattr(row, "assessment_pass_pct",      70),
+            "assessment_time_min":         getattr(row, "assessment_time_min",      30),
+            "assessment_retakes":          getattr(row, "assessment_retakes",        3),
         }
 
 

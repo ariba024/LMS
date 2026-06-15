@@ -20,7 +20,10 @@ from api.dependencies import (
     generate_course_in_background,
     job_store,
 )
-from api.schemas import CourseGenerateRequest, CourseGenerateResponse, CourseJobStatus, ErrorDetail
+from api.schemas import (
+    CourseGenerateRequest, CourseGenerateResponse, CourseJobStatus, ErrorDetail,
+    AssessmentConfigRequest, PublishRequest,
+)
 
 router = APIRouter(prefix="/api/v1/courses", tags=["Course Generation"])
 
@@ -32,6 +35,8 @@ def _start_course_job(
     instructions:       str | None,
     use_knowledge_base: bool,
     course_format:      str,
+    language:           str,
+    duration_range:     str,
     background_tasks:   BackgroundTasks,
     vector_store,
     embedder,
@@ -65,6 +70,8 @@ def _start_course_job(
         instructions,
         use_knowledge_base,
         course_format,
+        language,
+        duration_range,
     )
 
     return CourseGenerateResponse(
@@ -107,6 +114,8 @@ async def generate_course(
         instructions=request.instructions,
         use_knowledge_base=request.use_knowledge_base,
         course_format=request.course_format,
+        language=request.language,
+        duration_range=request.duration_range,
         background_tasks=background_tasks,
         vector_store=vector_store,
         embedder=embedder,
@@ -125,6 +134,8 @@ async def generate_course_from_blueprint(
     target_audience:    str  = Form("learners", description="Who the course is for"),
     use_knowledge_base: bool = Form(False, description="Enrich context from all documents, not just the source file"),
     course_format:      str  = Form("custom", description="'custom' follows the blueprint exactly; 'standard' uses the auto-outline pipeline"),
+    language:           str  = Form("English", description="Language for all course content"),
+    duration_range:     str  = Form("60-90 minutes", description="Target duration: '30-45 minutes', '60-90 minutes', '2-3 hours', '3+ hours'"),
 ):
     """
     **Form-data alternative to POST /generate.**
@@ -153,6 +164,8 @@ async def generate_course_from_blueprint(
         instructions=instructions,
         use_knowledge_base=use_knowledge_base,
         course_format=course_format,
+        language=language,
+        duration_range=duration_range,
         background_tasks=background_tasks,
         vector_store=vector_store,
         embedder=embedder,
@@ -184,7 +197,8 @@ def list_library():
     Returns metadata: script_id, source_file, course_title, target_audience,
     instructions, generated_at, total_lessons, estimated_duration_min.
     """
-    return {"scripts": library.list_all(), "total": len(library.list_all())}
+    scripts = library.list_all()
+    return {"scripts": scripts, "total": len(scripts)}
 
 
 @router.get("/library/{script_id}", tags=["Course Library"])
@@ -229,6 +243,42 @@ def update_library_script(
     if not updated:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found in library.")
     return {"message": "Script updated.", "script_id": script_id}
+
+
+@router.patch("/library/{script_id}/assessment-config", tags=["Course Library"])
+def save_assessment_config(script_id: str, req: AssessmentConfigRequest):
+    """
+    Store the assessment configuration (questions, pass %, time, retakes) for a course.
+    Called by the admin generator wizard after the learner configures the assessment step.
+    """
+    ok = library.save_assessment_config(
+        script_id=script_id,
+        num_questions=req.num_questions,
+        pass_pct=req.pass_pct,
+        time_min=req.time_min,
+        retakes=req.retakes,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
+    return {"message": "Assessment config saved.", "script_id": script_id}
+
+
+@router.post("/library/{script_id}/publish", tags=["Course Library"])
+def publish_course(script_id: str, req: PublishRequest):
+    """
+    Publish or unpublish a course. Sets the published flag so learners can access it.
+    """
+    published = req.publish_mode != "draft"
+    ok = library.publish(script_id, published=published)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
+    status = "published" if published else "draft"
+    return {
+        "message": f"Course {status}.",
+        "script_id": script_id,
+        "published": published,
+        "publish_mode": req.publish_mode,
+    }
 
 
 @router.delete("/library/{script_id}", tags=["Course Library"])

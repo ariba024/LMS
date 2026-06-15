@@ -71,10 +71,53 @@ def get_db():
 
 def init_db() -> None:
     """
-    Create every table that doesn't exist yet.
+    Create every table that doesn't exist yet, then run additive column migrations.
     Safe to call on every startup — CREATE TABLE IF NOT EXISTS semantics.
     """
     import api.models  # noqa: F401 — registers all ORM models with Base
     Base.metadata.create_all(bind=engine)
+    _migrate_course_scripts()
     db_type = "PostgreSQL" if _is_postgres else "SQLite"
     print(f"[db] {db_type} database initialised (all tables ready).")
+
+
+def _migrate_course_scripts() -> None:
+    """
+    Add new columns to course_scripts if they don't exist yet.
+    SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check PRAGMA first.
+    PostgreSQL uses a DO block to guard the ALTER safely.
+    """
+    from sqlalchemy import text
+
+    new_cols = [
+        ("language",                 "TEXT",    "'English'"),
+        ("difficulty",               "TEXT",    "''"),
+        ("published",                "INTEGER", "0"),
+        ("assessment_num_questions", "INTEGER", "5"),
+        ("assessment_pass_pct",      "INTEGER", "70"),
+        ("assessment_time_min",      "INTEGER", "30"),
+        ("assessment_retakes",       "INTEGER", "3"),
+    ]
+
+    with engine.connect() as conn:
+        if _is_postgres:
+            for col, typ, default in new_cols:
+                pg_type = "BOOLEAN" if typ == "INTEGER" and col == "published" else typ
+                try:
+                    conn.execute(text(
+                        f"ALTER TABLE course_scripts ADD COLUMN IF NOT EXISTS "
+                        f"{col} {pg_type} NOT NULL DEFAULT {default}"
+                    ))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+        else:
+            result   = conn.execute(text("PRAGMA table_info(course_scripts)"))
+            existing = {row[1] for row in result}
+            for col, typ, default in new_cols:
+                if col not in existing:
+                    conn.execute(text(
+                        f"ALTER TABLE course_scripts ADD COLUMN "
+                        f"{col} {typ} NOT NULL DEFAULT {default}"
+                    ))
+            conn.commit()
