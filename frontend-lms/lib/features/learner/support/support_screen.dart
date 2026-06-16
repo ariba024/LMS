@@ -7,6 +7,7 @@ import '../../../core/widgets/button.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/badge.dart';
 import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/arresto_ai_logo.dart';
 import '../../../data/providers/app_state.dart';
 
 class SupportScreen extends ConsumerStatefulWidget {
@@ -253,19 +254,7 @@ class _SidePanel extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [
-                        ArrestoColors.amber,
-                        ArrestoColors.orange
-                      ]),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded,
-                        size: 14, color: Colors.white),
-                  ),
+                  const ArrestoAiLogo(size: 28),
                   const SizedBox(width: 8),
                   Text('Try Arresto AI first',
                       style: ArrestoText.bodyBold(color: Colors.white)),

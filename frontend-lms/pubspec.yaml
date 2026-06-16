@@ -36,6 +36,10 @@ dependencies:
   # Markdown rendering
   flutter_markdown: ^0.7.4
 
+  # Voice — speech-to-text & text-to-speech (Web Speech API on web)
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

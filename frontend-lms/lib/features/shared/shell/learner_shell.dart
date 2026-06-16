@@ -6,6 +6,7 @@ import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import 'app_header.dart';
 import '../arresto_ai/arresto_ai_panel.dart';
+import '../../../core/widgets/arresto_ai_logo.dart';
 
 class LearnerShell extends ConsumerWidget {
   final Widget child;
@@ -307,16 +308,7 @@ class _AIFab extends StatelessWidget {
         backgroundColor: Colors.transparent,
         builder: (_) => const ArrestoAIPanel(),
       ),
-      icon: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: ArrestoColors.amber,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.auto_awesome_rounded,
-            size: 13, color: ArrestoColors.ink),
-      ),
+      icon: const ArrestoAiLogo(size: 24),
       label: Text('Arresto AI',
           style: ArrestoText.small(color: Colors.white)
               .copyWith(fontWeight: FontWeight.w600)),

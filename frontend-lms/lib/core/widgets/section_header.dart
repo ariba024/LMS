@@ -4,6 +4,7 @@ import '../theme/typography.dart';
 
 class SectionHeader extends StatelessWidget {
   final IconData? icon;
+  final Widget? leading;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -11,6 +12,7 @@ class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
     this.icon,
+    this.leading,
     required this.title,
     this.subtitle,
     this.trailing,
@@ -20,7 +22,10 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (icon != null) ...[
+        if (leading != null) ...[
+          leading!,
+          const SizedBox(width: 10),
+        ] else if (icon != null) ...[
           Container(
             width: 32,
             height: 32,
