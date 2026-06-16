@@ -70,7 +70,8 @@ class RetrievalPipeline:
         logger.info("Loading bge-m3 (cached after first download) ...")
         from sentence_transformers import SentenceTransformer
         self._st_model = SentenceTransformer("BAAI/bge-m3")
-        dim = self._st_model.get_sentence_embedding_dimension()
+        dim = getattr(self._st_model, 'get_embedding_dimension',
+                      self._st_model.get_sentence_embedding_dimension)()
         logger.info("bge-m3 ready — dim=%d", dim)
 
         # Phase 2 — BM25 sparse index (built once from all stored chunks)

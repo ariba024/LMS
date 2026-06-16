@@ -25,6 +25,7 @@ class Reranker:
     def __init__(self, model_name: str = _DEFAULT_MODEL) -> None:
         self._model_name = model_name
         self._model = None
+        self._load()  # eager-load at startup so first request isn't slow
 
     def _load(self) -> None:
         if self._model is not None:
