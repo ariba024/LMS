@@ -47,9 +47,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
     final tickets = ref.watch(ticketsProvider);
     final isWide = MediaQuery.of(context).size.width >= 900;
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,8 +77,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
             _MyTickets(tickets: tickets),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 

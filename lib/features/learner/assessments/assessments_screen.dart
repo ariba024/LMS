@@ -24,9 +24,7 @@ class AssessmentsScreen extends ConsumerWidget {
     final courses = ref.watch(coursesProvider);
     final available = courses.where((c) => c.progress > 0 && c.progress < 100).toList();
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,8 +94,7 @@ class AssessmentsScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 

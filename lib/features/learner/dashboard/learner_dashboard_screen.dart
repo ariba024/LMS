@@ -12,23 +12,21 @@ import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/arresto_ai_logo.dart';
-import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 import '../../../data/models/course.dart';
-import '../../../data/models/lesson.dart' show CourseLesson;
 
 class LearnerDashboardScreen extends ConsumerWidget {
   const LearnerDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final courses = ref.watch(coursesProvider);
+    // Use live library; fall back to empty list while loading so UI still builds
+    final courses = ref.watch(libraryProvider).valueOrNull ?? [];
     final enrolledCourses =
         courses.where((c) => c.progress > 0 && c.progress < 100).toList();
     final isWide = MediaQuery.of(context).size.width >= 1024;
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(ArrestoSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,23 +78,16 @@ class LearnerDashboardScreen extends ConsumerWidget {
                   ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
-class _HeroBanner extends ConsumerWidget {
+class _HeroBanner extends StatelessWidget {
   final Course course;
   const _HeroBanner({required this.course});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final lessons = ref.watch(lessonsProvider);
-    final cl = lessons.where((l) => l.courseId == course.id).toList();
-    final resumeLesson = cl.firstWhere(
-      (l) => !l.completed,
-      orElse: () => cl.isNotEmpty ? cl.first : CourseLesson(id: '', courseId: course.id, module: '', moduleNum: 1, title: '', durationSecs: 0),
-    );
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: ArrestoColors.surface,
@@ -126,7 +117,7 @@ class _HeroBanner extends ConsumerWidget {
                             Text(course.title, style: ArrestoText.h2()),
                             const SizedBox(height: 4),
                             Text(
-                              'Up next: Lesson 4 · Module 2 — System Components',
+                              'Tap to continue where you left off',
                               style: ArrestoText.bodySm(),
                             ),
                             const SizedBox(height: 12),
@@ -142,9 +133,8 @@ class _HeroBanner extends ConsumerWidget {
                                 ArrestoButton(
                                   label: 'Resume lesson',
                                   icon: const Icon(Icons.play_circle_rounded),
-                                  onPressed: resumeLesson.id.isNotEmpty
-                                      ? () => context.go('/learner/lesson/${course.id}/${resumeLesson.id}')
-                                      : null,
+                                  onPressed: () =>
+                                      context.go('/learner/course/${course.id}'),
                                 ),
                                 ArrestoButton(
                                   label: 'View course',

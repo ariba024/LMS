@@ -12,6 +12,7 @@ import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/progress_bar.dart';
 import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -81,9 +82,14 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _AdminStatsGrid extends StatelessWidget {
+class _AdminStatsGrid extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final libraryAsync = ref.watch(libraryProvider);
+    final courseCount = libraryAsync.maybeWhen(
+      data: (courses) => courses.length.toString(),
+      orElse: () => '—',
+    );
     return LayoutBuilder(builder: (ctx, c) {
       final cols = c.maxWidth > 1000 ? 4 : c.maxWidth > 600 ? 3 : 2;
       return GridView.count(
@@ -93,8 +99,8 @@ class _AdminStatsGrid extends StatelessWidget {
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         childAspectRatio: 1.5,
-        children: const [
-          StatCard(
+        children: [
+          const StatCard(
             title: 'Total Learners',
             value: '1,284',
             icon: Icons.people_rounded,
@@ -103,12 +109,12 @@ class _AdminStatsGrid extends StatelessWidget {
           ),
           StatCard(
             title: 'Total Courses',
-            value: '24',
+            value: courseCount,
             icon: Icons.library_books_rounded,
             iconColor: ArrestoColors.amber,
             barColor: ArrestoColors.amber,
           ),
-          StatCard(
+          const StatCard(
             title: 'Active Learners',
             value: '1,042',
             sub: '81% of total',
@@ -116,28 +122,28 @@ class _AdminStatsGrid extends StatelessWidget {
             iconColor: ArrestoColors.green,
             barColor: ArrestoColors.green,
           ),
-          StatCard(
+          const StatCard(
             title: 'Courses Generated',
             value: '47',
             icon: Icons.auto_awesome_rounded,
             iconColor: ArrestoColors.orange,
             barColor: ArrestoColors.orange,
           ),
-          StatCard(
+          const StatCard(
             title: 'Learning Hours',
             value: '18.2k',
             icon: Icons.schedule_rounded,
             iconColor: ArrestoColors.blue,
             barColor: ArrestoColors.blue,
           ),
-          StatCard(
+          const StatCard(
             title: 'AI Conversations',
             value: '3,420',
             icon: Icons.chat_rounded,
             iconColor: ArrestoColors.amber,
             barColor: ArrestoColors.amber,
           ),
-          StatCard(
+          const StatCard(
             title: 'Generating Now',
             value: '2',
             sub: 'In progress',

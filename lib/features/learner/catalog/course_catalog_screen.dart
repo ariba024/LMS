@@ -11,6 +11,7 @@ import '../../../core/widgets/chip_group.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 import '../../../data/models/course.dart';
 
 class CourseCatalogScreen extends ConsumerStatefulWidget {
@@ -35,90 +36,127 @@ class _CourseCatalogScreenState extends ConsumerState<CourseCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allCourses = ref.watch(coursesProvider);
+    final catalogAsync = ref.watch(libraryProvider);
 
-    final filtered = allCourses.where((c) {
-      final matchSearch = _search.isEmpty ||
-          c.title.toLowerCase().contains(_search.toLowerCase()) ||
-          c.cat.toLowerCase().contains(_search.toLowerCase());
-      final matchCat = _category == 'All' ||
-          c.cat.toLowerCase().contains(_category.toLowerCase());
-      return matchSearch && matchCat;
-    }).toList();
+    return catalogAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: ArrestoColors.orange),
+        ),
+        error: (e, _) => Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.wifi_off_rounded,
+                color: ArrestoColors.textMuted2, size: 40),
+            const SizedBox(height: 12),
+            Text('Could not load courses', style: ArrestoText.bodyMd()),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => ref.invalidate(libraryProvider),
+              child: const Text('Retry'),
+            ),
+          ]),
+        ),
+        data: (allCourses) {
+          final filtered = allCourses.where((c) {
+            final matchSearch = _search.isEmpty ||
+                c.title.toLowerCase().contains(_search.toLowerCase()) ||
+                c.cat.toLowerCase().contains(_search.toLowerCase());
+            final matchCat = _category == 'All' ||
+                c.cat.toLowerCase().contains(_category.toLowerCase());
+            return matchSearch && matchCat;
+          }).toList();
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SectionHeader(
-                    icon: Icons.explore_rounded,
-                    title: 'Course Catalog',
-                    subtitle:
-                        '${allCourses.length} courses available',
-                  ),
-                  const SizedBox(height: 16),
-                  // Search bar
-                  TextField(
-                    onChanged: (v) => setState(() => _search = v),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search_rounded,
-                          color: ArrestoColors.textMuted),
-                      hintText: 'Search courses...',
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.all(Radius.circular(999)),
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionHeader(
+                        icon: Icons.explore_rounded,
+                        title: 'Course Catalog',
+                        subtitle: '${allCourses.length} courses available',
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Filter chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _categories.map((cat) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ArrestoChip(
-                            label: cat,
-                            active: _category == cat,
-                            onTap: () => setState(() => _category = cat),
+                      const SizedBox(height: 16),
+                      TextField(
+                        onChanged: (v) => setState(() => _search = v),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search_rounded,
+                              color: ArrestoColors.textMuted),
+                          hintText: 'Search courses...',
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(999)),
                           ),
-                        );
-                      }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _categories.map((cat) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ArrestoChip(
+                                label: cat,
+                                active: _category == cat,
+                                onTap: () =>
+                                    setState(() => _category = cat),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('${filtered.length} results',
+                          style: ArrestoText.small()),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+              if (filtered.isEmpty)
+                SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.search_off_rounded,
+                            color: ArrestoColors.textMuted2, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          allCourses.isEmpty
+                              ? 'No courses published yet.\nAsk your admin to generate some!'
+                              : 'No courses match your search.',
+                          style: ArrestoText.body(),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text('${filtered.length} results',
-                      style: ArrestoText.small()),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 380,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 0.72,
-              ),
-              itemCount: filtered.length,
-              itemBuilder: (ctx, i) =>
-                  _CatalogCourseCard(course: filtered[i]),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
-      ),
-    );
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverGrid.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 380,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: 0.72,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (ctx, i) =>
+                        _CatalogCourseCard(course: filtered[i]),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            ],
+          );
+        },
+      );
   }
 }
 

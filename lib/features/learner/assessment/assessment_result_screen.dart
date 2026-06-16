@@ -7,7 +7,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/button.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/progress_bar.dart';
-import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 
 class AssessmentResultScreen extends ConsumerWidget {
   final String courseId;
@@ -15,22 +15,14 @@ class AssessmentResultScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(assessmentProvider);
-    final questions = ref.watch(questionsProvider);
+    final quizResult = ref.watch(quizResultsProvider);
 
-    final answered = state.answers.length;
-    final correct = state.answers.entries
-        .where((e) =>
-            e.key < questions.length &&
-            e.value == questions[e.key].a)
-        .length;
-    final score =
-        questions.isEmpty ? 0 : ((correct / questions.length) * 100).round();
+    final correct = quizResult?.correct ?? 0;
+    final total = quizResult?.total ?? 6;
+    final score = quizResult?.score ?? 0;
     final passed = score >= 70;
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
@@ -97,7 +89,7 @@ class AssessmentResultScreen extends ConsumerWidget {
                     passed ? ArrestoColors.green : ArrestoColors.red),
                 _metric('Correct', '$correct',
                     ArrestoColors.green),
-                _metric('Incorrect', '${questions.length - correct}',
+                _metric('Incorrect', '${total - correct}',
                     ArrestoColors.red),
                 _metric('Time', '12:34', ArrestoColors.blue),
               ],
@@ -190,8 +182,7 @@ class AssessmentResultScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _metric(String label, String value, Color color) {

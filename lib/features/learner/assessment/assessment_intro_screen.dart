@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/button.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/section_header.dart';
-import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 
 class AssessmentIntroScreen extends ConsumerWidget {
   final String courseId;
@@ -15,29 +14,36 @@ class AssessmentIntroScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.read(assessmentProvider.notifier).reset();
-    final questions = ref.watch(questionsProvider);
+    final detailAsync = ref.watch(courseDetailProvider(courseId));
+    final detail = detailAsync.valueOrNull;
+    final courseTitle = detail?['course_script']
+            ?['course_title'] as String? ??
+        'Course Assessment';
+    final numQuestions = (detail?['assessment_num_questions'] as num?)?.toInt() ?? 5;
+    final passPct      = (detail?['assessment_pass_pct']      as num?)?.toInt() ?? 70;
+    final timeMin      = (detail?['assessment_time_min']      as num?)?.toInt() ?? 30;
+    final retakes      = (detail?['assessment_retakes']       as num?)?.toInt() ?? 3;
 
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      appBar: AppBar(
-        backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
-        title: const Text('Assessment'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
+    return Column(
+      children: [
+        AppBar(
+          backgroundColor: ArrestoColors.surface,
+          foregroundColor: ArrestoColors.ink,
+          title: const Text('Assessment'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.pop(),
+          ),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        Expanded(child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SectionHeader(
               icon: Icons.assignment_rounded,
-              title: 'Working at Heights Assessment',
-              subtitle: 'Test your knowledge of fall protection',
+              title: courseTitle,
+              subtitle: 'AI-generated questions based on course content',
             ),
             const SizedBox(height: 20),
 
@@ -50,13 +56,13 @@ class AssessmentIntroScreen extends ConsumerWidget {
               mainAxisSpacing: 12,
               childAspectRatio: 1.4,
               children: [
-                _infoCard(Icons.quiz_rounded, '${questions.length}',
+                _infoCard(Icons.quiz_rounded, '$numQuestions',
                     'Questions', ArrestoColors.blue),
-                _infoCard(Icons.check_circle_rounded, '70%',
+                _infoCard(Icons.check_circle_rounded, '$passPct%',
                     'Pass Mark', ArrestoColors.green),
-                _infoCard(Icons.schedule_rounded, '30 min',
+                _infoCard(Icons.schedule_rounded, '$timeMin min',
                     'Time Limit', ArrestoColors.orange),
-                _infoCard(Icons.refresh_rounded, '3',
+                _infoCard(Icons.refresh_rounded, '$retakes',
                     'Attempts Left', ArrestoColors.amber),
               ],
             ),
@@ -85,7 +91,8 @@ class AssessmentIntroScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
+        )),
+      ],
     );
   }
 

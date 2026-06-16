@@ -20,9 +20,7 @@ class CertificatesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,8 +37,7 @@ class CertificatesScreen extends StatelessWidget {
                 )),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
