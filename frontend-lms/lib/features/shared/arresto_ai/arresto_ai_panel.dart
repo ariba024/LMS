@@ -232,7 +232,7 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
     _scrollToBottom();
 
     try {
-      final answer = await ChatService.ask(text);
+      final answer = await ChatService.ask(text, lessonContext: widget.lessonContext);
       if (!mounted) return;
       setState(() {
         _typing = false;

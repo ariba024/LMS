@@ -267,7 +267,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
           courseId: widget.courseId,
           lessonTitle: lesson?.title ?? 'Lesson',
           timestampSecs: _posSecs,
-          transcript: _transcriptSegments.map((s) => s.$2).join(' '),
+          transcript: lesson?.narrationScript ?? _transcriptSegments.map((s) => s.$2).join(' '),
         ),
       ),
     );

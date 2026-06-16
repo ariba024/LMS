@@ -85,10 +85,15 @@ class DocumentContentResponse(BaseModel):
 # -- Chat / RAG -----------------------------------------------------------------
 
 class ChatRequest(BaseModel):
-    question:    str   = Field(..., min_length=3, description="Question to ask")
-    source_file: str | None = Field(None, description="Restrict to one document")
-    asset_type:  str | None = Field(None, description="pdf | docx | pptx")
-    n_chunks:    int        = Field(5, ge=1, le=50)
+    question:           str   = Field(..., min_length=3, description="Question to ask")
+    source_file:        str | None = Field(None, description="Restrict to one document")
+    asset_type:         str | None = Field(None, description="pdf | docx | pptx")
+    n_chunks:           int        = Field(5, ge=1, le=50)
+    # Lesson context — sent from the in-lesson AI companion
+    lesson_id:          str | None = Field(None, description="Lesson ID (e.g. 'm1l2')")
+    course_id:          str | None = Field(None, description="Course script_id")
+    timestamp_secs:     int | None = Field(None, description="Learner's current playback position")
+    transcript_snippet: str | None = Field(None, description="Full narration script of the current lesson")
 
 
 class SourceInfo(BaseModel):
@@ -106,6 +111,26 @@ class ChatResponse(BaseModel):
     answer:     str
     sources:    list[SourceInfo]
     model_used: str | None = None
+
+
+class QuestionOption(BaseModel):
+    text: str
+
+class GeneratedQuestion(BaseModel):
+    type:          str              # multipleChoice | trueFalse | text
+    prompt:        str
+    options:       list[str]        # A/B/C/D text — empty for open-ended
+    correct_index: int | None       # 0-based; None for open-ended
+
+class QuestionGenerationRequest(BaseModel):
+    course_id:      str  = Field(..., description="Course script_id")
+    lesson_id:      str  = Field(..., description="Lesson ID (e.g. 'm1l2')")
+    count:          int  = Field(3, ge=1, le=10)
+    timestamp_secs: int | None = Field(None, description="Focus on content near this timestamp")
+
+class QuestionGenerationResponse(BaseModel):
+    lesson_title: str
+    questions:    list[GeneratedQuestion]
 
 
 # -- Course generation ----------------------------------------------------------
