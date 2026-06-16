@@ -50,7 +50,15 @@ class DocumentService {
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
-    await apiClient.post('/api/v1/documents/upload', data: formData);
+    await apiClient.post(
+      '/api/v1/documents/upload',
+      data: formData,
+      options: Options(
+        // First upload triggers model downloads on the server (bge-m3 ~570 MB,
+        // EasyOCR ~150 MB for scanned PDFs). Allow up to 10 minutes.
+        receiveTimeout: const Duration(minutes: 10),
+      ),
+    );
   }
 
   /// URL for downloading the original file from the backend.

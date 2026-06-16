@@ -281,6 +281,8 @@ def _sync_ingest(
         ".pdf":  AssetType.PDF,
         ".docx": AssetType.DOCX,
         ".pptx": AssetType.PPTX,
+        ".txt":  AssetType.TXT,
+        ".csv":  AssetType.TXT,
     }
 
     job.status = "processing"

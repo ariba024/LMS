@@ -25,3 +25,7 @@ sentence-transformers>=2.7.0
 
 # Vector store
 chromadb>=0.4.0
+
+# OCR for scanned PDFs (pure Python, no system binary needed)
+# Tesseract is also supported if the system binary + pytesseract are installed.
+easyocr>=1.7.0

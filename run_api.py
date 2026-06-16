@@ -38,6 +38,12 @@ except (AttributeError, io.UnsupportedOperation):
             sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
         )
 
+# -- Ensure project root is on sys.path for reload workers ---------------------
+_root = os.path.dirname(os.path.abspath(__file__))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+os.environ["PYTHONPATH"] = _root + os.pathsep + os.environ.get("PYTHONPATH", "")
+
 # -- Server ---------------------------------------------------------------------
 import argparse
 import uvicorn

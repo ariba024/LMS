@@ -35,7 +35,7 @@ from api.schemas import (
 
 router = APIRouter(prefix="/api/v1/documents", tags=["Documents"])
 
-_SUPPORTED = {".pdf", ".docx", ".pptx"}
+_SUPPORTED = {".pdf", ".docx", ".pptx", ".txt", ".csv"}
 
 
 def _build_content(filename: str, vector_store) -> DocumentContentResponse:
@@ -86,6 +86,9 @@ async def upload_document(
     The response body includes the full extracted text and every chunk so you
     can immediately verify what was captured.
     """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File must have a name.")
+
     ext = Path(file.filename).suffix.lower()
     if ext not in _SUPPORTED:
         raise HTTPException(
@@ -93,23 +96,24 @@ async def upload_document(
             detail=f"Unsupported file type '{ext}'. Supported: {sorted(_SUPPORTED)}",
         )
 
-    dest = settings.upload_dir / file.filename
+    safe_name = Path(file.filename).name  # strip any path components
+    dest = settings.upload_dir / safe_name
     raw  = await file.read()
     dest.write_bytes(raw)
 
-    job = job_store.create_upload(file.filename)
+    job = job_store.create_upload(safe_name)
     await asyncio.to_thread(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
 
     if job.status == "failed":
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {job.error}")
 
-    doc = _build_content(file.filename, vector_store)
+    doc = _build_content(safe_name, vector_store)
 
     return UploadResponse(
         job_id=job.job_id,
-        filename=file.filename,
+        filename=safe_name,
         status="completed",
-        message=f"'{file.filename}' ingested — {job.chunks_created} chunks stored.",
+        message=f"'{safe_name}' ingested — {job.chunks_created} chunks stored.",
         chunks_created=job.chunks_created,
         document=doc,
     )
@@ -139,32 +143,40 @@ async def batch_upload_documents(
     total_chunks = 0
 
     for file in files:
-        ext = Path(file.filename).suffix.lower()
+        if not file.filename:
+            results.append(BatchFileResult(
+                filename="<unknown>", status="skipped",
+                error="File must have a name.",
+            ))
+            continue
+
+        safe_name = Path(file.filename).name
+        ext = Path(safe_name).suffix.lower()
         if ext not in _SUPPORTED:
             results.append(BatchFileResult(
-                filename=file.filename,
+                filename=safe_name,
                 status="skipped",
                 error=f"Unsupported type '{ext}'. Supported: {sorted(_SUPPORTED)}",
             ))
             continue
 
-        dest = settings.upload_dir / file.filename
+        dest = settings.upload_dir / safe_name
         raw  = await file.read()
         dest.write_bytes(raw)
 
-        job = job_store.create_upload(file.filename)
+        job = job_store.create_upload(safe_name)
         await asyncio.to_thread(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
 
         if job.status == "completed":
             total_chunks += job.chunks_created or 0
             results.append(BatchFileResult(
-                filename=file.filename,
+                filename=safe_name,
                 status="completed",
                 chunks_created=job.chunks_created,
             ))
         else:
             results.append(BatchFileResult(
-                filename=file.filename,
+                filename=safe_name,
                 status="failed",
                 error=job.error,
             ))

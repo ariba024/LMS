@@ -23,7 +23,7 @@ logger = logging.getLogger("arresto.pipeline")
 from typing import TYPE_CHECKING
 
 from modules.content_ingestion import cleaner
-from modules.content_ingestion.extractors import DocxExtractor, PdfExtractor, PptxExtractor
+from modules.content_ingestion.extractors import DocxExtractor, PdfExtractor, PptxExtractor, TxtExtractor
 from modules.content_ingestion.models import Asset, ExtractedContent
 
 if TYPE_CHECKING:
@@ -56,6 +56,7 @@ class IngestionPipeline:
                          enable_ocr=enable_ocr, ocr_lang=ocr_lang),
             DocxExtractor(extract_images=_extract),
             PptxExtractor(extract_images=_extract),
+            TxtExtractor(),
         ]
         self._captioner    = captioner
         self._chunker      = chunker

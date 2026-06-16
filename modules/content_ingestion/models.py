@@ -14,6 +14,7 @@ class AssetType(str, Enum):
     PDF  = "pdf"
     DOCX = "docx"
     PPTX = "pptx"
+    TXT  = "txt"
 
 
 @dataclass

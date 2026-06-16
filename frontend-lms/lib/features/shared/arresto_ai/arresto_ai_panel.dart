@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -166,6 +167,11 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
   }
 
   // ── Web: MediaRecorder → Sarvam backend STT ─────────────────────────────────
+  //
+  // Uses recorder.start(250) — fires dataavailable every 250 ms.
+  // On stop we wait 400 ms for the final chunk, then POST to backend.
+  // Uses dart:js_util to read BlobEvent.data — avoids the html.BlobEvent cast
+  // that silently fails in Flutter web.
 
   Future<void> _startWebRecording() async {
     _audioChunks.clear();
@@ -174,37 +180,27 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
           .getUserMedia({'audio': true, 'video': false});
       _micStream = stream;
 
-      // Prefer opus/webm; fall back to browser default
-      final mimeType = html.MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : '';
-      final recorder = mimeType.isNotEmpty
-          ? html.MediaRecorder(stream, {'mimeType': mimeType})
-          : html.MediaRecorder(stream);
+      final recorder = html.MediaRecorder(stream);
       _recorder = recorder;
 
+      // Read BlobEvent.data via js_util — avoids the `as html.BlobEvent` cast
+      // which throws a CastError in Flutter web and is silently swallowed by
+      // the browser's event dispatch, leaving _audioChunks empty.
       recorder.addEventListener('dataavailable', (event) {
-        final blob = (event as html.BlobEvent).data;
-        if (blob != null && blob.size > 0) _audioChunks.add(blob);
-      });
-
-      recorder.addEventListener('stop', (_) {
-        stream.getTracks().forEach((t) => t.stop());
-        _micStream = null;
-        _recorder = null;
-        if (_audioChunks.isNotEmpty) {
-          _transcribeChunks();
-        } else {
-          if (mounted) {
-            setState(() {
-              _sttProcessing = false;
-              _voiceError = 'No audio recorded. Hold the mic button while speaking.';
-            });
+        try {
+          final jsBlob = js_util.getProperty<Object?>(event, 'data');
+          if (jsBlob != null) {
+            final blob = jsBlob as html.Blob;
+            if (blob.size > 0) _audioChunks.add(blob);
           }
+        } catch (e) {
+          debugPrint('[STT] dataavailable read error: $e');
         }
       });
 
-      recorder.start();
+      // Timeslice 250 ms: dataavailable fires every 250 ms during recording,
+      // guaranteeing chunks even for short recordings.
+      recorder.start(250);
       await _stopSpeak();
       _track('voice_listen_start');
       if (mounted) setState(() => _listening = true);
@@ -212,7 +208,9 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
       final msg = e.toString().toLowerCase();
       if (mounted) {
         setState(() {
-          _sttDenied = msg.contains('permission') || msg.contains('denied') || msg.contains('notallowed');
+          _sttDenied = msg.contains('permission') ||
+              msg.contains('denied') ||
+              msg.contains('notallowederror');
           _voiceError = _sttDenied
               ? 'Microphone access denied. Click the lock icon in your browser address bar and allow microphone.'
               : 'Could not start microphone. Please check your browser settings.';
@@ -222,19 +220,38 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
   }
 
   void _stopWebRecording() {
-    if (_recorder != null) {
-      _recorder!.stop();
-      if (mounted) setState(() { _listening = false; _sttProcessing = true; });
-    }
+    final rec = _recorder;
+    if (rec == null) return;
+    _recorder = null;
+
+    try { rec.stop(); } catch (_) {}
+    _micStream?.getTracks().forEach((t) => t.stop());
+    _micStream = null;
+
+    if (mounted) setState(() { _listening = false; _sttProcessing = true; });
+
+    // Wait for the final dataavailable chunk (timeslice = 250 ms) to arrive
+    // before processing. Avoids depending on the 'stop' event listener which
+    // is unreliable in dart:html.
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      if (_audioChunks.isNotEmpty) {
+        _transcribeChunks();
+      } else {
+        setState(() {
+          _sttProcessing = false;
+          _voiceError = 'No audio captured. Check your microphone is working.';
+        });
+      }
+    });
   }
 
   Future<void> _transcribeChunks() async {
     try {
-      // Merge all recorded chunks into one Blob
       final blob = html.Blob(_audioChunks, 'audio/webm');
       _audioChunks.clear();
 
-      // FileReader.readAsArrayBuffer returns a JS ArrayBuffer → ByteBuffer in Dart
+      // FileReader.readAsArrayBuffer returns a JS ArrayBuffer → ByteBuffer in Dart.
       final completer = Completer<Uint8List>();
       final reader = html.FileReader();
       reader.onLoad.listen((_) {
@@ -269,7 +286,6 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
       if (!mounted) return;
       setState(() {
         _sttProcessing = false;
-        // Show the real error so it's visible during debugging
         _voiceError = 'Transcription error: $e';
       });
     }

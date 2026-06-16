@@ -125,6 +125,19 @@ async def lifespan(app: FastAPI):
     app.state.progress_tracker = ProgressTracker(store=ProgressStore("lms.db"))
     logger.info("Progress tracker initialised (lms.db)")
 
+    # Pre-warm OCR engine in the background so the first document upload
+    # doesn't stall while EasyOCR downloads its language models (~150 MB).
+    if settings.enable_ocr:
+        import threading
+        from modules.content_ingestion.ocr import OCREngine
+        def _warm_ocr() -> None:
+            try:
+                OCREngine(settings.ocr_lang)._init()
+                logger.info("OCR engine pre-warmed (lang=%s)", settings.ocr_lang)
+            except Exception as exc:
+                logger.warning("OCR pre-warm failed: %s", exc)
+        threading.Thread(target=_warm_ocr, daemon=True, name="ocr-prewarm").start()
+
     app.state.retrieval_pipeline = None
     if settings.enable_retrieval_pipeline and settings.anthropic_api_key:
         try:

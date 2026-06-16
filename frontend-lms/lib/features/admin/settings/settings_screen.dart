@@ -1,5 +1,6 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/document_service.dart';
@@ -368,7 +369,7 @@ class _KnowledgeBaseSettingsState
 
   void _pickAndUpload() {
     final input = html.FileUploadInputElement()
-      ..accept = '.pdf,.docx,.doc,.pptx,.ppt,.txt,.csv'
+      ..accept = '.pdf,.docx,.pptx,.txt,.csv'
       ..multiple = false;
     input.click();
     input.onChange.listen((event) async {
@@ -383,8 +384,10 @@ class _KnowledgeBaseSettingsState
         final reader = html.FileReader();
         reader.readAsArrayBuffer(file);
         await reader.onLoadEnd.first;
-        final bytes = Uint8List.fromList(
-            (reader.result as ByteBuffer).asUint8List());
+        final raw = reader.result;
+        final bytes = raw is ByteBuffer
+            ? raw.asUint8List()
+            : Uint8List.fromList(raw as List<int>);
         await DocumentService.uploadDocument(bytes, file.name);
         if (!mounted) return;
         setState(() {
@@ -394,9 +397,30 @@ class _KnowledgeBaseSettingsState
         ref.invalidate(documentsNotifierProvider);
       } catch (e) {
         if (!mounted) return;
+        String msg = 'Upload failed';
+        if (e is DioException) {
+          final d = e.response?.data;
+          if (d is Map && d['detail'] != null) {
+            msg = 'Upload failed: ${d['detail']}';
+          } else if (e.response?.statusCode != null) {
+            msg = 'Upload failed: server error (${e.response!.statusCode})';
+          } else if (e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.connectionTimeout) {
+            msg = 'Upload failed: request timed out — '
+                'the server may still be processing. Try again in a moment.';
+          } else if (e.type == DioExceptionType.connectionError) {
+            msg = 'Upload failed: could not reach the server. '
+                'Check that the backend is running.';
+          } else {
+            msg = 'Upload failed: ${e.message ?? e.type.name}';
+          }
+        } else {
+          msg = 'Upload failed: $e';
+        }
         setState(() {
           _uploading = false;
-          _uploadError = 'Upload failed: $e';
+          _uploadError = msg;
         });
       }
     });

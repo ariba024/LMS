@@ -10,5 +10,6 @@ location rather than knowing each module path:
 from modules.content_ingestion.extractors.pdf import PdfExtractor
 from modules.content_ingestion.extractors.docx import DocxExtractor
 from modules.content_ingestion.extractors.pptx import PptxExtractor
+from modules.content_ingestion.extractors.txt import TxtExtractor
 
-__all__ = ["PdfExtractor", "DocxExtractor", "PptxExtractor"]
+__all__ = ["PdfExtractor", "DocxExtractor", "PptxExtractor", "TxtExtractor"]

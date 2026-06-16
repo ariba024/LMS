@@ -26,10 +26,14 @@ Pillow>=10.3.0
 # Embeddings + vector store
 sentence-transformers>=2.7.0
 chromadb>=0.4.0
+rank-bm25>=0.2.2
 
 # Optional — image captioning (BLIP-2, slow on CPU)
 # torch>=2.0.0
 # transformers>=4.37.0
+
+# OCR for scanned PDFs (pure Python, no system binary required)
+easyocr>=1.7.0
 
 # Edge TTS (free text-to-speech fallback)
 edge-tts>=6.1.9

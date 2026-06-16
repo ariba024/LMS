@@ -86,12 +86,22 @@ class PdfExtractor(BaseExtractor):
                 mat = fitz.Matrix(OCR_DPI / 72, OCR_DPI / 72)
                 pix = page_obj.get_pixmap(matrix=mat)
                 png = pix.tobytes("png")
-                ocr_text = self._ocr.extract_text(png)
-                if ocr_text:
-                    text = ocr_text          # plain OCR text, no [OCR page N] tag
-                    page_is_ocr = True
-                    ocr_pages.append(page_obj.number + 1)
-                    logger.info("Page %d: OCR extracted %d chars", page_obj.number + 1, len(ocr_text))
+                try:
+                    ocr_text = self._ocr.extract_text(png)
+                    if ocr_text:
+                        text = ocr_text      # plain OCR text, no [OCR page N] tag
+                        page_is_ocr = True
+                        ocr_pages.append(page_obj.number + 1)
+                        logger.info("Page %d: OCR extracted %d chars",
+                                    page_obj.number + 1, len(ocr_text))
+                except RuntimeError as ocr_err:
+                    # OCR engine not installed — keep whatever text the page
+                    # already had (may be empty for a fully scanned page).
+                    # Record once per document so operators know OCR is missing.
+                    msg = f"OCR unavailable (page {page_obj.number + 1}): {ocr_err}"
+                    if msg not in result.extraction_errors:
+                        result.extraction_errors.append(msg)
+                    logger.warning(msg)
 
             # -- Embedded image extraction ------------------------------------
             page_images: list[ExtractedImage] = []
