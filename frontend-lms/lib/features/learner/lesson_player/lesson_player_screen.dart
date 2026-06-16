@@ -1030,14 +1030,15 @@ class _TranscriptTabState extends State<_TranscriptTab> {
     super.dispose();
   }
 
-  // Use real narration script if available; fall back to mock segments
-  String get _scriptText {
+  String? get _scriptText {
     final script = widget.lesson.narrationScript;
-    if (script != null && script.isNotEmpty) return script;
-    return _transcriptSegments.map((s) => s.$2).join(' ');
+    if (script == null || script.isEmpty) return null;
+    return script;
   }
 
   Future<void> _toggleSpeak() async {
+    final text = _scriptText;
+    if (text == null) return;
     if (_speaking && !_paused) {
       await _tts.pause();
       if (mounted) setState(() => _paused = true);
@@ -1046,7 +1047,7 @@ class _TranscriptTabState extends State<_TranscriptTab> {
       await _tts.stop();
       if (kIsWeb) await _tts.setLanguage('en-US');
       if (mounted) setState(() { _speaking = true; _paused = false; });
-      await _tts.speak(_scriptText);
+      await _tts.speak(text);
     }
   }
 
@@ -1091,7 +1092,16 @@ class _TranscriptTabState extends State<_TranscriptTab> {
                 style: ArrestoText.bodyBold()),
           ),
           const SizedBox(width: 8),
-          if (!_speaking && !_paused)
+          if (_scriptText == null)
+            // No narration script available — show muted hint
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.volume_off_rounded,
+                  size: 14, color: ArrestoColors.textMuted),
+              const SizedBox(width: 4),
+              Text('No audio script',
+                  style: ArrestoText.xs(color: ArrestoColors.textMuted)),
+            ])
+          else if (!_speaking && !_paused)
             _chip(Icons.volume_up_rounded, 'Listen', _toggleSpeak)
           else ...[
             _chip(
@@ -1144,15 +1154,35 @@ class _TranscriptTabState extends State<_TranscriptTab> {
             child: SelectableText(
               q.isEmpty
                   ? widget.lesson.narrationScript!
-                  : widget.lesson.narrationScript!
-                      .split(' ')
-                      .where((w) => q.isEmpty || widget.lesson.narrationScript!.toLowerCase().contains(q))
-                      .join(' '),
+                  : (widget.lesson.narrationScript!.toLowerCase().contains(q)
+                      ? widget.lesson.narrationScript!
+                      : '(No matches for "$q")'),
               style: ArrestoText.body(color: ArrestoColors.ink),
             ),
           ),
         ] else ...[
-          // Fall back to timed mock segments
+          // No script available placeholder
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: ArrestoColors.bg2,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: ArrestoColors.cardBorder),
+            ),
+            child: Row(children: [
+              const Icon(Icons.info_outline_rounded,
+                  size: 16, color: ArrestoColors.textMuted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Transcript not available for this lesson.',
+                  style: ArrestoText.small(color: ArrestoColors.textMuted),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          // Timed mock segments (kept only as placeholder structure)
           ...List.generate(_transcriptSegments.length, (i) {
             final seg = _transcriptSegments[i];
             if (q.isNotEmpty && !seg.$2.toLowerCase().contains(q)) {

@@ -27,23 +27,46 @@ final courseLessonsProvider =
     final script = detail['course_script'] as Map<String, dynamic>? ?? {};
     final modules = script['modules'] as List? ?? [];
     final lessons = <CourseLesson>[];
-    for (final mod in modules) {
-      final modMap = mod as Map<String, dynamic>;
-      final moduleNum = (modMap['module_number'] as num).toInt();
-      final moduleTitle =
-          modMap['module_title'] as String? ?? 'Module $moduleNum';
-      final rawLessons = modMap['lessons'] as List? ?? [];
-      for (final les in rawLessons) {
-        final lesMap = les as Map<String, dynamic>;
-        final lessonNum = (lesMap['lesson_number'] as num).toInt();
+
+    if (modules.isNotEmpty) {
+      // Standard generated course: modules → lessons
+      for (final mod in modules) {
+        final modMap = mod as Map<String, dynamic>;
+        final moduleNum = (modMap['module_number'] as num).toInt();
+        final moduleTitle =
+            modMap['module_title'] as String? ?? 'Module $moduleNum';
+        final rawLessons = modMap['lessons'] as List? ?? [];
+        for (final les in rawLessons) {
+          final lesMap = les as Map<String, dynamic>;
+          final lessonNum = (lesMap['lesson_number'] as num).toInt();
+          lessons.add(CourseLesson(
+            id: 'm${moduleNum}l$lessonNum',
+            courseId: courseId,
+            module: moduleTitle,
+            moduleNum: moduleNum,
+            title: lesMap['lesson_title'] as String? ?? 'Lesson $lessonNum',
+            durationSecs:
+                ((lesMap['duration_minutes'] as num?)?.toInt() ?? 0) * 60,
+            narrationScript: lesMap['narration_script'] as String?,
+          ));
+        }
+      }
+    } else {
+      // Custom / blueprint course: flat items list (module=1, lesson=index+1)
+      final items = script['items'] as List? ?? [];
+      for (int i = 0; i < items.length; i++) {
+        final item = items[i] as Map<String, dynamic>;
+        final narration = item['narration'] as String? ??
+            item['narration_script'] as String?;
         lessons.add(CourseLesson(
-          id: 'm${moduleNum}l$lessonNum',
+          id: 'm1l${i + 1}',
           courseId: courseId,
-          module: moduleTitle,
-          moduleNum: moduleNum,
-          title: lesMap['lesson_title'] as String? ?? 'Lesson $lessonNum',
-          durationSecs: ((lesMap['duration_minutes'] as num?)?.toInt() ?? 0) * 60,
-          narrationScript: lesMap['narration_script'] as String?,
+          module: 'Module 1',
+          moduleNum: 1,
+          title: item['title'] as String? ?? 'Lesson ${i + 1}',
+          durationSecs:
+              ((item['estimated_time_min'] as num?)?.toInt() ?? 0) * 60,
+          narrationScript: narration,
         ));
       }
     }
