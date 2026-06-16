@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/arresto_ai_logo.dart';
 
 class ArrestoAiScreen extends ConsumerStatefulWidget {
   const ArrestoAiScreen({super.key});
@@ -69,8 +70,8 @@ class _ArrestoAiScreenState extends ConsumerState<ArrestoAiScreen> {
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: SectionHeader(
-            icon: Icons.smart_toy_rounded,
+          child: const SectionHeader(
+            leading: ArrestoAiLogo(size: 32),
             title: 'Arresto AI',
             subtitle: 'Your personal safety learning companion',
           ),
@@ -114,11 +115,7 @@ class _ChatBubble extends StatelessWidget {
         mainAxisAlignment: msg.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!msg.isUser) ...[
-            Container(
-              width: 30, height: 30,
-              decoration: const BoxDecoration(color: ArrestoColors.amberSoft, shape: BoxShape.circle),
-              child: const Icon(Icons.smart_toy_rounded, size: 16, color: ArrestoColors.orange),
-            ),
+            const ArrestoAiLogo(size: 30),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -167,11 +164,7 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(children: [
-        Container(
-          width: 30, height: 30,
-          decoration: const BoxDecoration(color: ArrestoColors.amberSoft, shape: BoxShape.circle),
-          child: const Icon(Icons.smart_toy_rounded, size: 16, color: ArrestoColors.orange),
-        ),
+        const ArrestoAiLogo(size: 30),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

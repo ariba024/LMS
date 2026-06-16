@@ -11,6 +11,7 @@ import '../../../core/widgets/progress_bar.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/arresto_ai_logo.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/models/course.dart';
 import '../../../data/models/lesson.dart' show CourseLesson;
@@ -516,19 +517,7 @@ class _RightSidebar extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [
-                        ArrestoColors.amber,
-                        ArrestoColors.orange
-                      ]),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded,
-                        size: 17, color: Colors.white),
-                  ),
+                  const ArrestoAiLogo(size: 32),
                   const SizedBox(width: 8),
                   Text('Arresto AI',
                       style: ArrestoText.h4(color: Colors.white)),

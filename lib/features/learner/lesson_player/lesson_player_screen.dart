@@ -1,23 +1,44 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/button.dart';
+import '../../../core/widgets/arresto_ai_logo.dart';
+import 'interactive_question.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/models/lesson.dart' show CourseLesson;
 import '../../../data/models/course.dart';
+import '../../shared/arresto_ai/arresto_ai_panel.dart';
 
-// ── Note model ────────────────────────────────────────────────────────────────
+// ── Note model (persisted) ──────────────────────────────────────────────────
 class _Note {
-  final String timestamp;
-  final String text;
-  _Note(this.timestamp, this.text);
+  final String id;
+  int posSecs;
+  String text;
+  _Note({required this.id, required this.posSecs, required this.text});
+
+  Map<String, dynamic> toJson() => {'id': id, 'pos': posSecs, 'text': text};
+  factory _Note.fromJson(Map<String, dynamic> j) =>
+      _Note(id: j['id'] as String, posSecs: j['pos'] as int, text: j['text'] as String);
 }
 
-// ── Lesson player screen ──────────────────────────────────────────────────────
+// ── Transcript segments (start second, text) ────────────────────────────────
+const List<(int, String)> _transcriptSegments = [
+  (0, 'Welcome to this lesson. In this session we\'ll cover the key concepts you need to understand to work safely at height.'),
+  (90, 'Let\'s start by looking at the regulatory requirements. According to OSHA 1926.502, all fall protection systems must meet minimum safety standards.'),
+  (180, 'Anchor points must be capable of supporting at least 5,000 lbs (22 kN) per attached worker, independent of any platform support.'),
+  (285, 'Always inspect your equipment before each use. Look for cuts, fraying, or corrosion that may indicate damage to webbing or hardware.'),
+  (380, 'In this demonstration, notice how the inspector systematically checks each component from the D-rings down to the leg straps.'),
+  (470, 'Finally, remember to calculate your total fall clearance so you never strike a lower level. That wraps up this lesson.'),
+];
+
+// ── Lesson player screen ─────────────────────────────────────────────────────
 class LessonPlayerScreen extends ConsumerStatefulWidget {
   final String courseId;
   final String lessonId;
@@ -29,46 +50,84 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
 
 class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   Timer? _ticker;
-  bool  _playing    = false;
-  int   _posSecs    = 0;
-  bool  _showKCheck = false;
-  int?  _kcAnswer;
-  bool  _kcDone     = false;
-  int   _xp         = 120;
-  int   _answered   = 0;
+  bool _playing = false;
+  int _posSecs = 0;
+  bool _showKCheck = false;
+  bool _kcDone = false;
+  int _xp = 120;
+  int _answered = 0;
+  bool _muted = false;
   String _activeTab = 'Notes';
 
   final _noteCtrl = TextEditingController();
-  final List<_Note> _notes = [];
+  final _noteSearchCtrl = TextEditingController();
+  final _transcriptSearchCtrl = TextEditingController();
+  List<_Note> _notes = [];
+  String? _editingNoteId;
+  String _noteQuery = '';
+  String _transcriptQuery = '';
+  SharedPreferences? _prefs;
 
-  // Knowledge-check question shown mid-lesson
-  static const _kc = (
-    q: 'Before connecting your lanyard, what\'s the minimum rating an anchor point must have?',
-    opts: ['10 kN', '22 kN', '5 kN', 'Any steel beam'],
-    correct: 1, // 22 kN
+  static const _kcQuestion = InteractiveQuestion(
+    type: QuestionType.multipleChoice,
+    prompt: 'What\'s the accepted minimum rating for a fall-arrest anchor?',
+    options: ['10 kN', '22 kN', '5 kN', 'Any steel beam'],
+    correctIndex: 1,
   );
+
+  String get _notesKey => 'lesson_notes_${widget.lessonId}';
 
   @override
   void initState() {
     super.initState();
     final lessons = ref.read(lessonsProvider);
-    final lesson  = _lesson(lessons);
+    final lesson = _lesson(lessons);
     if (lesson != null) _posSecs = lesson.savedPositionSecs;
+    _track('lesson_open');
+    _loadNotes();
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
     _noteCtrl.dispose();
+    _noteSearchCtrl.dispose();
+    _transcriptSearchCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Analytics hook (real apps wire this to a service) ──────────────────────
+  void _track(String event, [Map<String, Object?> params = const {}]) {
+    debugPrint('[analytics] $event '
+        'course=${widget.courseId} lesson=${widget.lessonId} t=$_posSecs $params');
+  }
+
+  // ── Notes persistence ──────────────────────────────────────────────────────
+  Future<void> _loadNotes() async {
+    _prefs = await SharedPreferences.getInstance();
+    final raw = _prefs!.getString(_notesKey);
+    if (raw != null && mounted) {
+      final list = (jsonDecode(raw) as List)
+          .map((e) => _Note.fromJson(e as Map<String, dynamic>))
+          .toList();
+      setState(() => _notes = list);
+    }
+  }
+
+  Future<void> _persistNotes() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    await _prefs!.setString(
+        _notesKey, jsonEncode(_notes.map((n) => n.toJson()).toList()));
   }
 
   CourseLesson? _lesson(List<CourseLesson> lessons) =>
       lessons.where((l) => l.id == widget.lessonId).firstOrNull;
 
+  // ── Playback ────────────────────────────────────────────────────────────────
   void _togglePlay() {
-    if (_showKCheck && !_kcDone) return; // blocked by knowledge check
+    if (_showKCheck && !_kcDone) return;
     setState(() => _playing = !_playing);
+    _track(_playing ? 'play' : 'pause');
     if (_playing) {
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
@@ -77,15 +136,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
           final dur = _lesson(lessons)?.durationSecs ?? 540;
           if (_posSecs < dur) {
             _posSecs++;
-            // Trigger knowledge check at 25% if not done
             if (!_kcDone && _posSecs == (dur * 0.25).round()) {
               _playing = false;
               _ticker?.cancel();
               _showKCheck = true;
+              _track('knowledge_check_shown');
             }
           } else {
             _playing = false;
             _ticker?.cancel();
+            _track('lesson_complete');
           }
         });
       });
@@ -94,65 +154,234 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     }
   }
 
-  void _answerKc(int idx) {
+  void _seekTo(int secs) {
+    final lessons = ref.read(lessonsProvider);
+    final dur = _lesson(lessons)?.durationSecs ?? 540;
+    setState(() => _posSecs = secs.clamp(0, dur));
+    _track('seek', {'to': _posSecs});
+  }
+
+  void _toggleMute() {
+    setState(() => _muted = !_muted);
+    _track('mute_toggle', {'muted': _muted});
+  }
+
+  void _onQuestionSubmit(QuestionResult result) {
     setState(() {
-      _kcAnswer = idx;
-      _kcDone   = true;
-      if (idx == _kc.correct) {
+      _kcDone = true;
+      _showKCheck = false;
+      if (result.correct) {
         _xp += 10;
         _answered++;
       }
     });
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
-      setState(() {
-        _showKCheck = false;
-        _kcAnswer   = null;
-      });
-      _togglePlay();
+    _track('knowledge_check_answered', {'correct': result.correct, 'mode': result.mode.name});
+    _togglePlay(); // resume video
+  }
+
+  void _onQuestionSkip() {
+    setState(() {
+      _kcDone = true;
+      _showKCheck = false;
+    });
+    _track('knowledge_check_skipped');
+    _togglePlay(); // resume video
+  }
+
+  // ── Notes CRUD ──────────────────────────────────────────────────────────────
+  void _saveNote() {
+    final text = _noteCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      if (_editingNoteId != null) {
+        final n = _notes.firstWhere((e) => e.id == _editingNoteId);
+        n.text = text;
+        _editingNoteId = null;
+        _track('note_edit');
+      } else {
+        _notes.add(_Note(
+          id: '${_posSecs}_${_notes.length}_${text.hashCode}',
+          posSecs: _posSecs,
+          text: text,
+        ));
+        _track('note_create');
+      }
+    });
+    _noteCtrl.clear();
+    _persistNotes(); // auto-save
+  }
+
+  void _startEditNote(_Note n) {
+    setState(() {
+      _editingNoteId = n.id;
+      _noteCtrl.text = n.text;
     });
   }
 
-  void _addNote(CourseLesson lesson) {
-    final text = _noteCtrl.text.trim();
-    if (text.isEmpty) return;
-    final m = _posSecs ~/ 60;
-    final s = _posSecs % 60;
-    final ts = '${m.toString().padLeft(1, '0')}:${s.toString().padLeft(2, '0')}';
-    setState(() => _notes.add(_Note(ts, text)));
-    _noteCtrl.clear();
+  void _cancelEdit() {
+    setState(() {
+      _editingNoteId = null;
+      _noteCtrl.clear();
+    });
+  }
+
+  void _deleteNote(String id) {
+    setState(() => _notes.removeWhere((n) => n.id == id));
+    _persistNotes();
+    _track('note_delete');
+  }
+
+  void _exportNotes() {
+    if (_notes.isEmpty) {
+      _toast('No notes to export');
+      return;
+    }
+    final text = _notes
+        .map((n) => '[${_fmtSecs(n.posSecs)}] ${n.text}')
+        .join('\n');
+    Clipboard.setData(ClipboardData(text: text));
+    _toast('${_notes.length} notes copied to clipboard');
+    _track('notes_export');
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+  }
+
+  // ── AI companion ────────────────────────────────────────────────────────────
+  void _openAI({String? seed}) {
+    final lessons = ref.read(lessonsProvider);
+    final lesson = _lesson(lessons);
+    _track('ai_open', {'seed': seed});
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ArrestoAIPanel(
+        seedQuestion: seed,
+        lessonContext: AiLessonContext(
+          lessonId: widget.lessonId,
+          courseId: widget.courseId,
+          lessonTitle: lesson?.title ?? 'Lesson',
+          timestampSecs: _posSecs,
+          transcript: _transcriptSegments.map((s) => s.$2).join(' '),
+        ),
+      ),
+    );
+  }
+
+  // ── Quiz navigation with validation ──────────────────────────────────────────
+  void _goToQuiz() {
+    _track('go_to_quiz');
+    // Validate a quiz exists for this course (mock: all courses have one).
+    context.go('/learner/assessment/${widget.courseId}');
   }
 
   String _fmtSecs(int secs) {
     final m = secs ~/ 60;
     final s = secs % 60;
-    return '${m.toString().padLeft(1, '0')}:${s.toString().padLeft(2, '0')}';
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  int get _activeSegmentIndex {
+    var idx = 0;
+    for (var i = 0; i < _transcriptSegments.length; i++) {
+      if (_posSecs >= _transcriptSegments[i].$1) idx = i;
+    }
+    return idx;
   }
 
   @override
   Widget build(BuildContext context) {
-    final lessons  = ref.watch(lessonsProvider);
-    final courses  = ref.watch(coursesProvider);
-    final lesson   = _lesson(lessons);
-    if (lesson == null) return const Scaffold(body: Center(child: Text('Lesson not found')));
+    final lessons = ref.watch(lessonsProvider);
+    final courses = ref.watch(coursesProvider);
+    final lesson = _lesson(lessons);
+    if (lesson == null) {
+      return const Scaffold(body: Center(child: Text('Lesson not found')));
+    }
 
-    final course   = courses.firstWhere((c) => c.id == widget.courseId, orElse: () => courses.first);
-    final dur      = lesson.durationSecs;
+    final course =
+        courses.firstWhere((c) => c.id == widget.courseId, orElse: () => courses.first);
+    final dur = lesson.durationSecs;
     final progress = dur > 0 ? _posSecs / dur : 0.0;
 
-    // Lessons for this course
     final courseLessons = lessons.where((l) => l.courseId == widget.courseId).toList();
-    final lessonIndex   = courseLessons.indexWhere((l) => l.id == widget.lessonId);
-    final hasPrev       = lessonIndex > 0;
-    final hasNext       = lessonIndex < courseLessons.length - 1;
-
+    final lessonIndex = courseLessons.indexWhere((l) => l.id == widget.lessonId);
+    final hasPrev = lessonIndex > 0;
+    final hasNext = lessonIndex < courseLessons.length - 1;
     final isWide = MediaQuery.of(context).size.width > 900;
+
+    final videoBox = _VideoBox(
+      lesson: lesson, posSecs: _posSecs, dur: dur, progress: progress,
+      playing: _playing, muted: _muted,
+      onTogglePlay: _togglePlay, fmtSecs: _fmtSecs,
+      onSeekSecs: _seekTo, onToggleMute: _toggleMute,
+      onNotesShortcut: () => setState(() => _activeTab = 'Notes'),
+      onFullscreen: () => _toast('Fullscreen is not available in the preview build'),
+      questionOverlay: _showKCheck
+          ? InteractiveQuestionOverlay(
+              question: _kcQuestion,
+              index: 1,
+              total: 1,
+              companionName: 'Aria',
+              onSubmit: _onQuestionSubmit,
+              onSkip: _onQuestionSkip,
+            )
+          : null,
+    );
+
+    final tabsSection = _TabsSection(
+      lesson: lesson,
+      courseLessons: courseLessons,
+      activeTab: _activeTab,
+      noteCount: _notes.length,
+      notes: _notes,
+      noteCtrl: _noteCtrl,
+      noteSearchCtrl: _noteSearchCtrl,
+      transcriptSearchCtrl: _transcriptSearchCtrl,
+      noteQuery: _noteQuery,
+      transcriptQuery: _transcriptQuery,
+      editingNoteId: _editingNoteId,
+      posSecs: _posSecs,
+      activeSegmentIndex: _activeSegmentIndex,
+      fmtSecs: _fmtSecs,
+      onTabChange: (t) => setState(() => _activeTab = t),
+      onSaveNote: _saveNote,
+      onStartEdit: _startEditNote,
+      onCancelEdit: _cancelEdit,
+      onDeleteNote: _deleteNote,
+      onSeekNote: (n) => _seekTo(n.posSecs),
+      onCopyNote: (n) {
+        Clipboard.setData(ClipboardData(text: n.text));
+        _toast('Note copied');
+      },
+      onExportNotes: _exportNotes,
+      onAiNotes: () => _openAI(seed: 'Summarize this lesson'),
+      onNoteSearch: (v) => setState(() => _noteQuery = v),
+      onTranscriptSearch: (v) => setState(() => _transcriptQuery = v),
+      onSeekSegment: (secs) => _seekTo(secs),
+      onResourceAction: (name, download) {
+        _toast(download ? 'Downloading $name…' : 'Opening $name…');
+        _track(download ? 'resource_download' : 'resource_open', {'file': name});
+      },
+    );
+
+    final sidebar = _RightSidebar(
+      lesson: lesson, course: course, courseLessons: courseLessons,
+      lessonIndex: lessonIndex, lessonProgress: progress,
+      xp: _xp, answered: _answered, courseProgress: course.progress / 100,
+      onGoToQuiz: _goToQuiz,
+      onAskAi: () => _openAI(),
+      onSelectTool: (tab) => setState(() => _activeTab = tab),
+    );
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
       body: Column(
         children: [
-          // ── Top breadcrumb bar ─────────────────────────────────────────────
           Container(
             color: ArrestoColors.surface,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -165,67 +394,82 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
               ),
             ]),
           ),
-
-          // ── Body ───────────────────────────────────────────────────────────
           Expanded(
             child: isWide
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Left: player + tabs
-                      Expanded(child: _LeftPanel(
-                        lesson: lesson, course: course,
-                        courseLessons: courseLessons, lessonIndex: lessonIndex,
-                        posSecs: _posSecs, dur: dur, progress: progress,
-                        playing: _playing, showKCheck: _showKCheck,
-                        kcAnswer: _kcAnswer, kcDone: _kcDone,
-                        hasPrev: hasPrev, hasNext: hasNext,
-                        notes: _notes, noteCtrl: _noteCtrl,
-                        activeTab: _activeTab,
-                        onTogglePlay: _togglePlay,
-                        onAnswerKc: _answerKc,
-                        onAddNote: () => _addNote(lesson),
-                        onDeleteNote: (i) => setState(() => _notes.removeAt(i)),
-                        onTabChange: (t) => setState(() => _activeTab = t),
-                        onPrev: hasPrev ? () {
-                          _ticker?.cancel();
-                          context.go('/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex - 1].id}');
-                        } : null,
-                        onNext: hasNext ? () {
-                          _ticker?.cancel();
-                          context.go('/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex + 1].id}');
-                        } : null,
-                        fmtSecs: _fmtSecs,
-                      )),
-                      // Right: learning companion
-                      SizedBox(
-                        width: 300,
-                        child: _RightSidebar(
-                          lesson: lesson, course: course,
-                          courseLessons: courseLessons,
-                          lessonIndex: lessonIndex,
-                          lessonProgress: progress,
-                          xp: _xp, answered: _answered,
-                          courseProgress: course.progress / 100,
-                          onGoToQuiz: () => context.go('/learner/assessment/${widget.courseId}'),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${lesson.module} · Lesson ${lessonIndex + 1} of ${courseLessons.length}',
+                                      style: ArrestoText.small(),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(lesson.title, style: ArrestoText.h2()),
+                                  ],
+                                ),
+                              ),
+                              videoBox,
+                              _PrevNextRow(
+                                onPrev: hasPrev
+                                    ? () {
+                                        _ticker?.cancel();
+                                        context.go(
+                                            '/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex - 1].id}');
+                                      }
+                                    : null,
+                                onNext: hasNext
+                                    ? () {
+                                        _ticker?.cancel();
+                                        context.go(
+                                            '/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex + 1].id}');
+                                      }
+                                    : null,
+                                onAskAi: () => _openAI(),
+                              ),
+                              const Divider(height: 1),
+                              tabsSection,
+                            ],
+                          ),
                         ),
                       ),
+                      SizedBox(width: 300, child: sidebar),
                     ],
                   )
-                : SingleChildScrollView(child: Column(children: [
-                    _VideoBox(
-                      lesson: lesson, posSecs: _posSecs, dur: dur, progress: progress,
-                      playing: _playing, showKCheck: _showKCheck,
-                      kcAnswer: _kcAnswer, kcDone: _kcDone,
-                      onTogglePlay: _togglePlay, onAnswerKc: _answerKc, fmtSecs: _fmtSecs,
-                    ),
-                    _RightSidebar(
-                      lesson: lesson, course: course, courseLessons: courseLessons,
-                      lessonIndex: lessonIndex, lessonProgress: progress,
-                      xp: _xp, answered: _answered, courseProgress: course.progress / 100,
-                      onGoToQuiz: () => context.go('/learner/assessment/${widget.courseId}'),
-                    ),
-                  ])),
+                : SingleChildScrollView(
+                    child: Column(children: [
+                      videoBox,
+                      _PrevNextRow(
+                        onPrev: hasPrev
+                            ? () {
+                                _ticker?.cancel();
+                                context.go(
+                                    '/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex - 1].id}');
+                              }
+                            : null,
+                        onNext: hasNext
+                            ? () {
+                                _ticker?.cancel();
+                                context.go(
+                                    '/learner/lesson/${widget.courseId}/${courseLessons[lessonIndex + 1].id}');
+                              }
+                            : null,
+                        onAskAi: () => _openAI(),
+                      ),
+                      const Divider(height: 1),
+                      tabsSection,
+                      sidebar,
+                    ]),
+                  ),
           ),
         ],
       ),
@@ -233,126 +477,38 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   }
 }
 
-// ── Left panel (player + tabs) ────────────────────────────────────────────────
-class _LeftPanel extends StatelessWidget {
-  final CourseLesson lesson;
-  final Course course;
-  final List<CourseLesson> courseLessons;
-  final int lessonIndex, posSecs, dur;
-  final double progress;
-  final bool playing, showKCheck, kcDone;
-  final int? kcAnswer;
-  final bool hasPrev, hasNext;
-  final List<_Note> notes;
-  final TextEditingController noteCtrl;
-  final String activeTab;
-  final VoidCallback onTogglePlay;
-  final Function(int) onAnswerKc;
-  final VoidCallback onAddNote;
-  final Function(int) onDeleteNote;
-  final Function(String) onTabChange;
+// ── Prev / Next / Ask AI row ──────────────────────────────────────────────────
+class _PrevNextRow extends StatelessWidget {
   final VoidCallback? onPrev, onNext;
-  final String Function(int) fmtSecs;
-
-  const _LeftPanel({
-    required this.lesson, required this.course, required this.courseLessons, // CourseLesson
-    required this.lessonIndex, required this.posSecs, required this.dur,
-    required this.progress, required this.playing, required this.showKCheck,
-    required this.kcAnswer, required this.kcDone, required this.hasPrev,
-    required this.hasNext, required this.notes, required this.noteCtrl,
-    required this.activeTab, required this.onTogglePlay, required this.onAnswerKc,
-    required this.onAddNote, required this.onDeleteNote, required this.onTabChange,
-    required this.onPrev, required this.onNext, required this.fmtSecs,
-  });
+  final VoidCallback onAskAi;
+  const _PrevNextRow({required this.onPrev, required this.onNext, required this.onAskAi});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Lesson title header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              '${lesson.module} · Lesson ${lessonIndex + 1} of ${courseLessons.length}',
-              style: ArrestoText.small(),
-            ),
-            const SizedBox(height: 2),
-            Text(lesson.title, style: ArrestoText.h2()),
-          ]),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(children: [
+        ArrestoButton(
+          label: 'Prev',
+          variant: ArrestoButtonVariant.ghost,
+          size: ArrestoButtonSize.sm,
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: onPrev,
         ),
-
-        // Video player
-        _VideoBox(
-          lesson: lesson, posSecs: posSecs, dur: dur, progress: progress,
-          playing: playing, showKCheck: showKCheck,
-          kcAnswer: kcAnswer, kcDone: kcDone,
-          onTogglePlay: onTogglePlay, onAnswerKc: onAnswerKc, fmtSecs: fmtSecs,
+        const Spacer(),
+        ArrestoButton(
+          label: 'Next lesson',
+          size: ArrestoButtonSize.sm,
+          icon: const Icon(Icons.arrow_forward_rounded),
+          onPressed: onNext,
         ),
-
-        // Prev / Next
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(children: [
-            ArrestoButton(
-              label: 'Prev',
-              variant: ArrestoButtonVariant.ghost,
-              size: ArrestoButtonSize.sm,
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: onPrev,
-            ),
-            const Spacer(),
-            ArrestoButton(
-              label: 'Next lesson',
-              size: ArrestoButtonSize.sm,
-              icon: const Icon(Icons.arrow_forward_rounded),
-              onPressed: onNext,
-            ),
-            const SizedBox(width: 12),
-            ArrestoButton(
-              label: 'Ask Arresto AI',
-              variant: ArrestoButtonVariant.ghost,
-              size: ArrestoButtonSize.sm,
-              icon: const Icon(Icons.smart_toy_rounded),
-              onPressed: () {},
-            ),
-          ]),
-        ),
-
-        const Divider(height: 1),
-
-        // Tabs
-        _TabBar(activeTab: activeTab, noteCount: notes.length, onTabChange: onTabChange),
-
-        const Divider(height: 1),
-
-        // Tab content
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: activeTab == 'Notes'
-              ? _NotesTab(
-                  notes: notes, noteCtrl: noteCtrl,
-                  onAdd: onAddNote, onDelete: onDeleteNote,
-                )
-              : activeTab == 'Resources'
-                  ? _ResourcesTab()
-                  : _TranscriptTab(lesson: lesson),
-        ),
-
-        // Related lessons
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(Icons.grid_view_rounded, size: 18, color: ArrestoColors.orange),
-              const SizedBox(width: 8),
-              Text('Related lessons', style: ArrestoText.h3()),
-            ]),
-            const SizedBox(height: 4),
-            Text('In this course', style: ArrestoText.small()),
-            const SizedBox(height: 12),
-            ...courseLessons.where((l) => l.id != lesson.id).take(3).map((l) => _RelatedLessonRow(lesson: l)),
-          ]),
+        const SizedBox(width: 12),
+        ArrestoButton(
+          label: 'Ask Arresto AI',
+          variant: ArrestoButtonVariant.ghost,
+          size: ArrestoButtonSize.sm,
+          icon: const ArrestoAiLogo(size: 18),
+          onPressed: onAskAi,
         ),
       ]),
     );
@@ -364,132 +520,120 @@ class _VideoBox extends StatelessWidget {
   final CourseLesson lesson;
   final int posSecs, dur;
   final double progress;
-  final bool playing, showKCheck, kcDone;
-  final int? kcAnswer;
-  final VoidCallback onTogglePlay;
-  final Function(int) onAnswerKc;
+  final bool playing, muted;
+  final VoidCallback onTogglePlay, onToggleMute, onNotesShortcut, onFullscreen;
+  final Function(int) onSeekSecs;
   final String Function(int) fmtSecs;
+  final Widget? questionOverlay;
 
   const _VideoBox({
     required this.lesson, required this.posSecs, required this.dur,
-    required this.progress, required this.playing, required this.showKCheck,
-    required this.kcAnswer, required this.kcDone,
-    required this.onTogglePlay, required this.onAnswerKc, required this.fmtSecs,
+    required this.progress, required this.playing, required this.muted,
+    required this.onTogglePlay, required this.fmtSecs,
+    required this.onSeekSecs, required this.onToggleMute,
+    required this.onNotesShortcut, required this.onFullscreen,
+    this.questionOverlay,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Video area
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            color: const Color(0xFF111111),
-            child: Stack(
-              children: [
-                // "Video" gradient background
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF1a1a1a), Color(0xFF0d0d0d)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Container(
+        color: const Color(0xFF111111),
+        child: Stack(
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1a1a1a), Color(0xFF0d0d0d)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                // Play state indicator
-                if (!playing && !showKCheck)
-                  Center(
-                    child: GestureDetector(
-                      onTap: onTogglePlay,
-                      child: Container(
-                        width: 72, height: 72,
-                        decoration: BoxDecoration(
-                          color: ArrestoColors.amber,
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: ArrestoColors.amber.withValues(alpha: 0.4), blurRadius: 24)],
-                        ),
-                        child: const Icon(Icons.play_arrow_rounded, color: ArrestoColors.ink, size: 40),
-                      ),
-                    ),
-                  ),
-                if (playing)
-                  Positioned(
-                    right: 16, top: 16,
-                    child: GestureDetector(
-                      onTap: onTogglePlay,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.pause_rounded, color: Colors.white, size: 22),
-                      ),
-                    ),
-                  ),
-
-                // Knowledge check overlay
-                if (showKCheck) _KnowledgeCheckOverlay(kcAnswer: kcAnswer, kcDone: kcDone, onAnswer: onAnswerKc),
-
-                // Bottom progress bar + controls
-                Positioned(
-                  bottom: 0, left: 0, right: 0,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Color(0xDD000000), Colors.transparent],
-                      ),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(12, 24, 12, 8),
-                    child: Column(children: [
-                      // Scrub bar
-                      SliderTheme(
-                        data: SliderThemeData(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                          activeTrackColor: ArrestoColors.amber,
-                          inactiveTrackColor: Colors.white30,
-                          thumbColor: ArrestoColors.amber,
-                          overlayColor: ArrestoColors.amber.withValues(alpha: 0.3),
-                        ),
-                        child: Slider(
-                          value: progress.clamp(0.0, 1.0),
-                          onChanged: (_) {},
-                        ),
-                      ),
-                      // Controls row
-                      Row(children: [
-                        _ctrl(Icons.replay_10_rounded, () {}),
-                        _ctrl(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, onTogglePlay),
-                        _ctrl(Icons.forward_10_rounded, () {}),
-                        _ctrl(Icons.volume_up_rounded, () {}),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${fmtSecs(posSecs)} / ${fmtSecs(dur)}',
-                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                        const Spacer(),
-                        _speedChip(),
-                        const SizedBox(width: 6),
-                        _pill('CC'),
-                        const SizedBox(width: 6),
-                        _ctrl(Icons.note_alt_outlined, () {}),
-                        _ctrl(Icons.grid_view_rounded, () {}),
-                        _ctrl(Icons.fullscreen_rounded, () {}),
-                      ]),
-                    ]),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            if (!playing && questionOverlay == null)
+              Center(
+                child: GestureDetector(
+                  onTap: onTogglePlay,
+                  child: Container(
+                    width: 72, height: 72,
+                    decoration: BoxDecoration(
+                      color: ArrestoColors.amber,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: ArrestoColors.amber.withValues(alpha: 0.4), blurRadius: 24)],
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, color: ArrestoColors.ink, size: 40),
+                  ),
+                ),
+              ),
+            if (playing)
+              Positioned(
+                right: 16, top: 16,
+                child: GestureDetector(
+                  onTap: onTogglePlay,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.pause_rounded, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Color(0xDD000000), Colors.transparent],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(12, 24, 12, 8),
+                child: Column(children: [
+                  SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                      activeTrackColor: ArrestoColors.amber,
+                      inactiveTrackColor: Colors.white30,
+                      thumbColor: ArrestoColors.amber,
+                      overlayColor: ArrestoColors.amber.withValues(alpha: 0.3),
+                    ),
+                    child: Slider(
+                      value: progress.clamp(0.0, 1.0),
+                      onChanged: (v) => onSeekSecs((v * dur).round()),
+                    ),
+                  ),
+                  Row(children: [
+                    _ctrl(Icons.replay_10_rounded, () => onSeekSecs(posSecs - 10)),
+                    _ctrl(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, onTogglePlay),
+                    _ctrl(Icons.forward_10_rounded, () => onSeekSecs(posSecs + 10)),
+                    _ctrl(muted ? Icons.volume_off_rounded : Icons.volume_up_rounded, onToggleMute),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${fmtSecs(posSecs)} / ${fmtSecs(dur)}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    const Spacer(),
+                    _pill('1×'),
+                    const SizedBox(width: 6),
+                    _pill('CC'),
+                    const SizedBox(width: 6),
+                    _ctrl(Icons.note_alt_outlined, onNotesShortcut),
+                    _ctrl(Icons.fullscreen_rounded, onFullscreen),
+                  ]),
+                ]),
+              ),
+            ),
+            if (questionOverlay != null) questionOverlay!,
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -498,15 +642,6 @@ class _VideoBox extends StatelessWidget {
         onPressed: onTap,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      );
-
-  Widget _speedChip() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Text('1×', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
       );
 
   Widget _pill(String label) => Container(
@@ -519,116 +654,74 @@ class _VideoBox extends StatelessWidget {
       );
 }
 
-// ── Knowledge check overlay ───────────────────────────────────────────────────
-class _KnowledgeCheckOverlay extends StatelessWidget {
-  final int? kcAnswer;
-  final bool kcDone;
-  final Function(int) onAnswer;
+// ── Tabs section (shared by both layouts) ─────────────────────────────────────
+class _TabsSection extends StatelessWidget {
+  final CourseLesson lesson;
+  final List<CourseLesson> courseLessons;
+  final String activeTab;
+  final int noteCount, posSecs, activeSegmentIndex;
+  final List<_Note> notes;
+  final TextEditingController noteCtrl, noteSearchCtrl, transcriptSearchCtrl;
+  final String noteQuery, transcriptQuery;
+  final String? editingNoteId;
+  final String Function(int) fmtSecs;
+  final Function(String) onTabChange;
+  final VoidCallback onSaveNote, onCancelEdit, onExportNotes, onAiNotes;
+  final Function(_Note) onStartEdit, onSeekNote, onCopyNote;
+  final Function(String) onDeleteNote, onNoteSearch, onTranscriptSearch;
+  final Function(int) onSeekSegment;
+  final void Function(String name, bool download) onResourceAction;
 
-  static const _kc = (
-    q: 'Before connecting your lanyard, what\'s the minimum rating an anchor point must have?',
-    opts: ['10 kN', '22 kN', '5 kN', 'Any steel beam'],
-    correct: 1,
-  );
-
-  const _KnowledgeCheckOverlay({this.kcAnswer, required this.kcDone, required this.onAnswer});
+  const _TabsSection({
+    required this.lesson, required this.courseLessons, required this.activeTab,
+    required this.noteCount, required this.posSecs, required this.activeSegmentIndex,
+    required this.notes, required this.noteCtrl, required this.noteSearchCtrl,
+    required this.transcriptSearchCtrl, required this.noteQuery, required this.transcriptQuery,
+    required this.editingNoteId, required this.fmtSecs, required this.onTabChange,
+    required this.onSaveNote, required this.onCancelEdit, required this.onExportNotes,
+    required this.onAiNotes, required this.onStartEdit, required this.onSeekNote,
+    required this.onCopyNote, required this.onDeleteNote, required this.onNoteSearch,
+    required this.onTranscriptSearch, required this.onSeekSegment, required this.onResourceAction,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black87,
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: ArrestoColors.amberSoft, borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.smart_toy_rounded, color: ArrestoColors.orange, size: 18),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _TabBar(activeTab: activeTab, noteCount: noteCount, onTabChange: onTabChange),
+      const Divider(height: 1),
+      Padding(
+        padding: const EdgeInsets.all(20),
+        child: activeTab == 'Notes'
+            ? _NotesTab(
+                notes: notes, noteCtrl: noteCtrl, noteSearchCtrl: noteSearchCtrl,
+                noteQuery: noteQuery, editingNoteId: editingNoteId, fmtSecs: fmtSecs,
+                onSave: onSaveNote, onCancelEdit: onCancelEdit, onExport: onExportNotes,
+                onAiNotes: onAiNotes, onStartEdit: onStartEdit, onSeek: onSeekNote,
+                onCopy: onCopyNote, onDelete: onDeleteNote, onSearch: onNoteSearch,
+              )
+            : activeTab == 'Resources'
+                ? _ResourcesTab(onAction: onResourceAction)
+                : _TranscriptTab(
+                    lesson: lesson, posSecs: posSecs, activeIndex: activeSegmentIndex,
+                    searchCtrl: transcriptSearchCtrl, query: transcriptQuery,
+                    fmtSecs: fmtSecs, onSearch: onTranscriptSearch, onSeek: onSeekSegment,
                   ),
-                  const SizedBox(width: 10),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Arresto AI · Knowledge check', style: ArrestoText.bodyBold()),
-                    Text('Answer to continue your lesson', style: ArrestoText.small()),
-                  ]),
-                ]),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: ArrestoColors.blueSoft, borderRadius: BorderRadius.circular(6)),
-                  child: const Text('MCQ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: ArrestoColors.blue)),
-                ),
-                const SizedBox(height: 10),
-                Text(_kc.q, style: ArrestoText.bodyBold()),
-                const SizedBox(height: 12),
-                ...List.generate(_kc.opts.length, (i) {
-                  final label = String.fromCharCode(65 + i);
-                  final isSelected = kcAnswer == i;
-                  final isCorrect  = i == _kc.correct;
-                  Color bg = Colors.white;
-                  Color border = ArrestoColors.line;
-                  if (kcDone && isSelected) {
-                    bg     = isCorrect ? ArrestoColors.greenSoft : ArrestoColors.redSoft;
-                    border = isCorrect ? ArrestoColors.green      : ArrestoColors.red;
-                  } else if (kcDone && isCorrect) {
-                    bg = ArrestoColors.greenSoft; border = ArrestoColors.green;
-                  }
-                  return GestureDetector(
-                    onTap: kcDone ? null : () => onAnswer(i),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: border),
-                      ),
-                      child: Row(children: [
-                        Container(
-                          width: 26, height: 26,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected ? ArrestoColors.ink : ArrestoColors.bg2,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(label, style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700,
-                            color: isSelected ? Colors.white : ArrestoColors.textMuted,
-                          )),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(_kc.opts[i], style: ArrestoText.bodyBold()),
-                        if (kcDone && isCorrect) ...[
-                          const Spacer(),
-                          const Icon(Icons.check_circle_rounded, color: ArrestoColors.green, size: 18),
-                        ],
-                        if (kcDone && isSelected && !isCorrect) ...[
-                          const Spacer(),
-                          const Icon(Icons.cancel_rounded, color: ArrestoColors.red, size: 18),
-                        ],
-                      ]),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        ),
       ),
-    );
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.grid_view_rounded, size: 18, color: ArrestoColors.orange),
+            const SizedBox(width: 8),
+            Text('Related lessons', style: ArrestoText.h3()),
+          ]),
+          const SizedBox(height: 4),
+          Text('In this course', style: ArrestoText.small()),
+          const SizedBox(height: 12),
+          ...courseLessons.where((l) => l.id != lesson.id).take(3).map((l) => _RelatedLessonRow(lesson: l)),
+        ]),
+      ),
+    ]);
   }
 }
 
@@ -679,26 +772,50 @@ class _TabBar extends StatelessWidget {
 // ── Notes tab ─────────────────────────────────────────────────────────────────
 class _NotesTab extends StatelessWidget {
   final List<_Note> notes;
-  final TextEditingController noteCtrl;
-  final VoidCallback onAdd;
-  final Function(int) onDelete;
-  const _NotesTab({required this.notes, required this.noteCtrl, required this.onAdd, required this.onDelete});
+  final TextEditingController noteCtrl, noteSearchCtrl;
+  final String noteQuery;
+  final String? editingNoteId;
+  final String Function(int) fmtSecs;
+  final VoidCallback onSave, onCancelEdit, onExport, onAiNotes;
+  final Function(_Note) onStartEdit, onSeek, onCopy;
+  final Function(String) onDelete, onSearch;
+
+  const _NotesTab({
+    required this.notes, required this.noteCtrl, required this.noteSearchCtrl,
+    required this.noteQuery, required this.editingNoteId, required this.fmtSecs,
+    required this.onSave, required this.onCancelEdit, required this.onExport,
+    required this.onAiNotes, required this.onStartEdit, required this.onSeek,
+    required this.onCopy, required this.onDelete, required this.onSearch,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final editing = editingNoteId != null;
+    final filtered = noteQuery.isEmpty
+        ? notes
+        : notes.where((n) => n.text.toLowerCase().contains(noteQuery.toLowerCase())).toList();
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Input
       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         Expanded(
           child: TextField(
             controller: noteCtrl,
             minLines: 2,
             maxLines: 4,
-            decoration: const InputDecoration(hintText: 'Write a note…'),
+            onSubmitted: (_) => onSave(),
+            decoration: InputDecoration(
+              hintText: editing ? 'Edit note…' : 'Write a note at this timestamp…',
+            ),
           ),
         ),
         const SizedBox(width: 10),
-        ArrestoButton(label: 'Add note', size: ArrestoButtonSize.sm, onPressed: onAdd),
+        Column(children: [
+          ArrestoButton(label: editing ? 'Save' : 'Add note', size: ArrestoButtonSize.sm, onPressed: onSave),
+          if (editing) ...[
+            const SizedBox(height: 6),
+            TextButton(onPressed: onCancelEdit, child: const Text('Cancel')),
+          ],
+        ]),
       ]),
       const SizedBox(height: 12),
       Row(children: [
@@ -706,8 +823,8 @@ class _NotesTab extends StatelessWidget {
           label: 'Arresto AI notes',
           size: ArrestoButtonSize.sm,
           variant: ArrestoButtonVariant.ghost,
-          icon: const Icon(Icons.smart_toy_rounded),
-          onPressed: () {},
+          icon: const ArrestoAiLogo(size: 18),
+          onPressed: onAiNotes,
         ),
         const SizedBox(width: 8),
         ArrestoButton(
@@ -715,53 +832,79 @@ class _NotesTab extends StatelessWidget {
           size: ArrestoButtonSize.sm,
           variant: ArrestoButtonVariant.ghost,
           icon: const Icon(Icons.download_rounded),
-          onPressed: () {},
+          onPressed: onExport,
         ),
       ]),
       const SizedBox(height: 12),
-      if (notes.isEmpty)
-        Text('No notes yet. Add a note above!', style: ArrestoText.small()),
-      ...notes.asMap().entries.map((e) {
-        final i = e.key;
-        final n = e.value;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: ArrestoColors.amberSoft,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: ArrestoColors.amber.withValues(alpha: 0.3)),
+      if (notes.isNotEmpty)
+        TextField(
+          controller: noteSearchCtrl,
+          onChanged: onSearch,
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search_rounded, size: 18),
+            hintText: 'Search notes…',
           ),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(color: ArrestoColors.amber, borderRadius: BorderRadius.circular(6)),
-              child: Text(n.timestamp, style: ArrestoText.xs()),
+        ),
+      const SizedBox(height: 12),
+      if (notes.isEmpty)
+        Text('No notes yet. Add a note above — it\'s tagged to the current video time and saved automatically.',
+            style: ArrestoText.small())
+      else if (filtered.isEmpty)
+        Text('No notes match "$noteQuery".', style: ArrestoText.small()),
+      ...filtered.map((n) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: ArrestoColors.amberSoft,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: ArrestoColors.amber.withValues(alpha: 0.3)),
             ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(n.text, style: ArrestoText.body())),
-            Row(children: [
-              IconButton(icon: const Icon(Icons.copy_rounded, size: 15, color: ArrestoColors.textMuted), onPressed: () {}, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
-              IconButton(icon: const Icon(Icons.edit_rounded, size: 15, color: ArrestoColors.textMuted), onPressed: () {}, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
-              IconButton(icon: const Icon(Icons.delete_outline_rounded, size: 15, color: ArrestoColors.textMuted), onPressed: () => onDelete(i), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              GestureDetector(
+                onTap: () => onSeek(n),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(color: ArrestoColors.amber, borderRadius: BorderRadius.circular(6)),
+                  child: Text(fmtSecs(n.posSecs), style: ArrestoText.xs()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(n.text, style: ArrestoText.body())),
+              Row(children: [
+                _iconBtn(Icons.copy_rounded, () => onCopy(n)),
+                _iconBtn(Icons.edit_rounded, () => onStartEdit(n)),
+                _iconBtn(Icons.delete_outline_rounded, () => onDelete(n.id)),
+              ]),
             ]),
-          ]),
-        );
-      }),
+          )),
     ]);
   }
+
+  Widget _iconBtn(IconData icon, VoidCallback onTap) => IconButton(
+        icon: Icon(icon, size: 15, color: ArrestoColors.textMuted),
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      );
 }
 
 // ── Resources tab ─────────────────────────────────────────────────────────────
 class _ResourcesTab extends StatelessWidget {
+  final void Function(String name, bool download) onAction;
+  const _ResourcesTab({required this.onAction});
+
   static const _res = [
     ('Fall Protection Checklist.pdf', 'PDF', '1.2 MB'),
     ('Anchor Point Rating Chart.pdf', 'PDF', '0.8 MB'),
-    ('OHSMS Compliance Matrix.xlsx',  'XLS', '2.1 MB'),
+    ('OHSMS Compliance Matrix.xlsx', 'XLS', '2.1 MB'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    if (_res.isEmpty) {
+      return Text('No resources attached to this lesson.', style: ArrestoText.small());
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: _res.map((r) {
@@ -784,13 +927,21 @@ class _ResourcesTab extends StatelessWidget {
               child: Icon(Icons.description_rounded, size: 18, color: isPdf ? ArrestoColors.red : ArrestoColors.green),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.$1, style: ArrestoText.bodyBold()),
-              Text('${r.$2} · ${r.$3}', style: ArrestoText.xs()),
-            ])),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(r.$1, style: ArrestoText.bodyBold()),
+                Text('${r.$2} · ${r.$3}', style: ArrestoText.xs()),
+              ]),
+            ),
             IconButton(
+              tooltip: 'Open',
+              icon: const Icon(Icons.open_in_new_rounded, color: ArrestoColors.textMuted, size: 20),
+              onPressed: () => onAction(r.$1, false),
+            ),
+            IconButton(
+              tooltip: 'Download',
               icon: const Icon(Icons.download_rounded, color: ArrestoColors.orange),
-              onPressed: () {},
+              onPressed: () => onAction(r.$1, true),
             ),
           ]),
         );
@@ -802,32 +953,78 @@ class _ResourcesTab extends StatelessWidget {
 // ── Transcript tab ────────────────────────────────────────────────────────────
 class _TranscriptTab extends StatelessWidget {
   final CourseLesson lesson;
-  const _TranscriptTab({required this.lesson});
+  final int posSecs, activeIndex;
+  final TextEditingController searchCtrl;
+  final String query;
+  final String Function(int) fmtSecs;
+  final Function(String) onSearch;
+  final Function(int) onSeek;
+
+  const _TranscriptTab({
+    required this.lesson, required this.posSecs, required this.activeIndex,
+    required this.searchCtrl, required this.query, required this.fmtSecs,
+    required this.onSearch, required this.onSeek,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final q = query.toLowerCase();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Transcript — ${lesson.title}', style: ArrestoText.bodyBold()),
+        Row(children: [
+          Expanded(child: Text('Transcript — ${lesson.title}', style: ArrestoText.bodyBold())),
+        ]),
+        const SizedBox(height: 10),
+        TextField(
+          controller: searchCtrl,
+          onChanged: onSearch,
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search_rounded, size: 18),
+            hintText: 'Search transcript…',
+          ),
+        ),
         const SizedBox(height: 12),
-        ...[
-          ('0:00', 'Welcome to this lesson on ${lesson.title}. In this session we\'ll cover the key concepts you need to understand.'),
-          ('1:30', 'Let\'s start by looking at the regulatory requirements. According to OSHA 1926.502, all fall protection systems must meet minimum safety standards.'),
-          ('3:00', 'Anchor points must be capable of supporting at least 5,000 lbs (22 kN) per attached worker.'),
-          ('4:45', 'Always inspect your equipment before each use. Look for cuts, fraying, or corrosion that may indicate damage.'),
-          ('6:20', 'In this demonstration, notice how the inspector systematically checks each component.'),
-        ].map((entry) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(
-              width: 36,
-              child: Text(entry.$1, style: ArrestoText.xs()),
+        ...List.generate(_transcriptSegments.length, (i) {
+          final seg = _transcriptSegments[i];
+          if (q.isNotEmpty && !seg.$2.toLowerCase().contains(q)) {
+            return const SizedBox.shrink();
+          }
+          final isActive = i == activeIndex;
+          return InkWell(
+            onTap: () => onSeek(seg.$1),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                color: isActive ? ArrestoColors.amberSoft : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isActive ? ArrestoColors.amber.withValues(alpha: 0.5) : Colors.transparent,
+                ),
+              ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(
+                  width: 40,
+                  child: Text(fmtSecs(seg.$1),
+                      style: ArrestoText.xs(
+                          color: isActive ? ArrestoColors.orange : ArrestoColors.textMuted)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(seg.$2,
+                      style: isActive
+                          ? ArrestoText.body(color: ArrestoColors.ink).copyWith(fontWeight: FontWeight.w600)
+                          : ArrestoText.body()),
+                ),
+                if (isActive)
+                  const Icon(Icons.volume_up_rounded, size: 14, color: ArrestoColors.orange),
+              ]),
             ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(entry.$2, style: ArrestoText.body())),
-          ]),
-        )),
+          );
+        }),
       ],
     );
   }
@@ -848,27 +1045,33 @@ class _RelatedLessonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = _icons[lesson.id.hashCode % _icons.length];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: ArrestoColors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: ArrestoColors.line),
-      ),
-      child: Row(children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(color: ArrestoColors.amberSoft, borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, size: 16, color: ArrestoColors.orange),
+    return InkWell(
+      onTap: () => context.go('/learner/lesson/${lesson.courseId}/${lesson.id}'),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: ArrestoColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: ArrestoColors.line),
         ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(lesson.title, style: ArrestoText.bodyBold(), overflow: TextOverflow.ellipsis),
-          Text('${lesson.module} · ${lesson.durationSecs ~/ 60} min', style: ArrestoText.xs()),
-        ])),
-        const Icon(Icons.chevron_right_rounded, color: ArrestoColors.textMuted),
-      ]),
+        child: Row(children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(color: ArrestoColors.amberSoft, borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 16, color: ArrestoColors.orange),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(lesson.title, style: ArrestoText.bodyBold(), overflow: TextOverflow.ellipsis),
+              Text('${lesson.module} · ${lesson.durationSecs ~/ 60} min', style: ArrestoText.xs()),
+            ]),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: ArrestoColors.textMuted),
+        ]),
+      ),
     );
   }
 }
@@ -881,12 +1084,14 @@ class _RightSidebar extends StatelessWidget {
   final int lessonIndex;
   final double lessonProgress, courseProgress;
   final int xp, answered;
-  final VoidCallback onGoToQuiz;
+  final VoidCallback onGoToQuiz, onAskAi;
+  final Function(String) onSelectTool;
 
   const _RightSidebar({
-    required this.lesson, required this.course, required this.courseLessons, // CourseLesson
+    required this.lesson, required this.course, required this.courseLessons,
     required this.lessonIndex, required this.lessonProgress, required this.courseProgress,
     required this.xp, required this.answered, required this.onGoToQuiz,
+    required this.onAskAi, required this.onSelectTool,
   });
 
   @override
@@ -894,15 +1099,10 @@ class _RightSidebar extends StatelessWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Learning companion card
         ArrestoCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: ArrestoColors.amberSoft, borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.smart_toy_rounded, color: ArrestoColors.orange, size: 18),
-              ),
+              const ArrestoAiLogo(size: 34),
               const SizedBox(width: 10),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Learning companion', style: ArrestoText.bodyBold()),
@@ -937,38 +1137,31 @@ class _RightSidebar extends StatelessWidget {
               child: ArrestoButton(
                 label: 'Ask Arresto AI',
                 variant: ArrestoButtonVariant.dark,
-                icon: const Icon(Icons.smart_toy_rounded),
-                onPressed: () {},
+                icon: const ArrestoAiLogo(size: 18),
+                onPressed: onAskAi,
               ),
             ),
           ]),
         ),
         const SizedBox(height: 14),
-
-        // Quick tools
         ArrestoCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Quick tools', style: ArrestoText.bodyBold()),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: _quickTool(Icons.note_rounded, 'Notes', badge: '1')),
+              Expanded(child: _quickTool(Icons.note_rounded, 'Notes', onTap: () => onSelectTool('Notes'))),
               const SizedBox(width: 8),
-              Expanded(child: _quickTool(Icons.description_rounded, 'Resources')),
+              Expanded(child: _quickTool(Icons.description_rounded, 'Resources', onTap: () => onSelectTool('Resources'))),
             ]),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(child: _quickTool(Icons.text_snippet_rounded, 'Transcript')),
+              Expanded(child: _quickTool(Icons.text_snippet_rounded, 'Transcript', onTap: () => onSelectTool('Transcript'))),
               const SizedBox(width: 8),
-              Expanded(child: GestureDetector(
-                onTap: onGoToQuiz,
-                child: _quickTool(Icons.quiz_rounded, 'Go to quiz'),
-              )),
+              Expanded(child: _quickTool(Icons.quiz_rounded, 'Go to quiz', onTap: onGoToQuiz)),
             ]),
           ]),
         ),
         const SizedBox(height: 14),
-
-        // Course progress
         ArrestoCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Course progress', style: ArrestoText.bodyBold()),
@@ -990,23 +1183,27 @@ class _RightSidebar extends StatelessWidget {
             const SizedBox(height: 12),
             ...courseLessons.take(8).map((l) {
               final isActive = l.id == lesson.id;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(children: [
-                  Icon(
-                    l.completed ? Icons.check_circle_rounded : (isActive ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded),
-                    size: 16,
-                    color: l.completed ? ArrestoColors.green : (isActive ? ArrestoColors.orange : ArrestoColors.textMuted2),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(
-                    l.title,
-                    style: isActive
-                        ? ArrestoText.bodyBold(color: ArrestoColors.orange)
-                        : ArrestoText.body(color: l.completed ? ArrestoColors.textSecondary : ArrestoColors.textMuted),
-                    overflow: TextOverflow.ellipsis,
-                  )),
-                ]),
+              return InkWell(
+                onTap: () => context.go('/learner/lesson/${l.courseId}/${l.id}'),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Icon(
+                      l.completed ? Icons.check_circle_rounded : (isActive ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded),
+                      size: 16,
+                      color: l.completed ? ArrestoColors.green : (isActive ? ArrestoColors.orange : ArrestoColors.textMuted2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      l.title,
+                      style: isActive
+                          ? ArrestoText.bodyBold(color: ArrestoColors.orange)
+                          : ArrestoText.body(color: l.completed ? ArrestoColors.textSecondary : ArrestoColors.textMuted),
+                      overflow: TextOverflow.ellipsis,
+                    )),
+                  ]),
+                ),
               );
             }),
           ]),
@@ -1035,26 +1232,22 @@ class _RightSidebar extends StatelessWidget {
     ]);
   }
 
-  Widget _quickTool(IconData icon, String label, {String? badge}) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: ArrestoColors.line),
-        borderRadius: BorderRadius.circular(10),
+  Widget _quickTool(IconData icon, String label, {required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          border: Border.all(color: ArrestoColors.line),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(children: [
+          Icon(icon, size: 16, color: ArrestoColors.orange),
+          const SizedBox(width: 6),
+          Flexible(child: Text(label, style: ArrestoText.small(), overflow: TextOverflow.ellipsis)),
+        ]),
       ),
-      child: Row(children: [
-        Icon(icon, size: 16, color: ArrestoColors.orange),
-        const SizedBox(width: 6),
-        Text(label, style: ArrestoText.small()),
-        if (badge != null) ...[
-          const SizedBox(width: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(color: ArrestoColors.orange, borderRadius: BorderRadius.circular(99)),
-            child: Text(badge, style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ]),
     );
   }
 }
