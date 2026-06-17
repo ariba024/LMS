@@ -12,17 +12,24 @@ final libraryProvider =
 });
 
 // ── Course detail (full script) ───────────────────────────────────────────────
+// Returns {} for mock/demo course IDs (no dashes) to avoid hitting the API.
 final courseDetailProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
-  (ref, scriptId) => CourseService.getCourseDetail(scriptId),
+  (ref, scriptId) {
+    if (!scriptId.contains('-')) return Future.value({});
+    return CourseService.getCourseDetail(scriptId);
+  },
 );
 
 // ── Course lessons parsed from real script ────────────────────────────────────
 // Calls getCourseDetail and converts modules[].lessons[] → CourseLesson list.
 // Lesson IDs: 'm{moduleNum}l{lessonNum}' e.g. 'm1l1', 'm2l3'.
+// Returns [] for mock/demo course IDs (no dashes) so the lesson player falls
+// back to mock data without making a 404 API call.
 final courseLessonsProvider =
     FutureProvider.autoDispose.family<List<CourseLesson>, String>(
   (ref, courseId) async {
+    if (!courseId.contains('-')) return [];
     final detail = await CourseService.getCourseDetail(courseId);
     final script = detail['course_script'] as Map<String, dynamic>? ?? {};
     final modules = script['modules'] as List? ?? [];
