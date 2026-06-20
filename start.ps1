@@ -10,7 +10,7 @@ Write-Host "API docs  http://localhost:$ApiPort/docs" -ForegroundColor Gray
 Write-Host ""
 
 # Backend API window
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root'; .venv\Scripts\python.exe run_api.py --port $ApiPort --reload" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root'; .venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port $ApiPort --reload" -WindowStyle Normal
 
 Start-Sleep -Milliseconds 800
 
