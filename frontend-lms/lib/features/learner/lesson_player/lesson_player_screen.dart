@@ -870,6 +870,7 @@ class _VideoBoxState extends State<_VideoBox> {
   bool _vcReady = false;
   bool _videoEnded = false;
   String? _loadedUrl;
+  Timer? _endFallbackTimer;
 
   @override
   void initState() {
@@ -905,6 +906,7 @@ class _VideoBoxState extends State<_VideoBox> {
   }
 
   Future<void> _initVideo(String url) async {
+    _endFallbackTimer?.cancel();
     _loadedUrl = url;
     _videoEnded = false;
     final vc = VideoPlayerController.networkUrl(Uri.parse(url));
@@ -916,7 +918,17 @@ class _VideoBoxState extends State<_VideoBox> {
       _vcReady = true;
       // Report real duration to the parent so it can replace the mock value
       final realDur = vc.value.duration.inSeconds;
-      if (realDur > 0) widget.onDurationLoaded?.call(realDur);
+      if (realDur > 0) {
+        widget.onDurationLoaded?.call(realDur);
+        // Timer fallback: fire onVideoEnded if the listener misses end on Flutter Web.
+        // Triggers 2 s past expected end so it only kicks in when the listener fails.
+        _endFallbackTimer = Timer(Duration(seconds: realDur + 2), () {
+          if (!_videoEnded && mounted) {
+            _videoEnded = true;
+            widget.onVideoEnded?.call();
+          }
+        });
+      }
       // Listen for video reaching its natural end
       vc.addListener(_onControllerUpdate);
       if (widget.playing) vc.play();
@@ -932,8 +944,16 @@ class _VideoBoxState extends State<_VideoBox> {
   void _onControllerUpdate() {
     if (_videoEnded || _vc == null || !_vcReady) return;
     final val = _vc!.value;
-    if (!val.isInitialized || val.duration.inMilliseconds == 0) return;
-    if (val.position >= val.duration && !val.isPlaying) {
+    if (!val.isInitialized) return;
+    final durMs = val.duration.inMilliseconds;
+    if (durMs == 0) return;
+    final posMs = val.position.inMilliseconds;
+    // 300 ms tolerance: Flutter Web's video_player can report position 1–2 frames
+    // short of duration when the 'ended' event fires, causing the exact equality
+    // check to miss. Combined with !isPlaying this is safe against mid-video pauses
+    // because the browser keeps isPlaying=true right up until the ended event.
+    if (posMs > 0 && posMs >= durMs - 300 && !val.isPlaying) {
+      _endFallbackTimer?.cancel();
       _videoEnded = true;
       widget.onVideoEnded?.call();
     }
@@ -941,6 +961,7 @@ class _VideoBoxState extends State<_VideoBox> {
 
   @override
   void dispose() {
+    _endFallbackTimer?.cancel();
     _vc?.dispose();
     super.dispose();
   }
