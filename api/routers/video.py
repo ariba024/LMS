@@ -11,6 +11,8 @@ GET    /api/v1/video/languages                     Supported languages + TTS eng
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import asyncio
@@ -479,6 +481,107 @@ def stream_video(render_id: str, request: Request):
             "Content-Length": str(file_size),
         },
     )
+
+
+@router.get("/scripts/{script_id}/lessons/{lesson_ref}/stream")
+def stream_lesson_video(script_id: str, lesson_ref: str, request: Request):
+    """
+    Concatenate all completed scene MP4s for a lesson and stream as one video.
+    Scenes are sorted by scene_index; if only one scene exists it is streamed
+    directly without re-encoding.  Uses ffmpeg concat demuxer (no re-encode).
+    """
+    from modules.video.generators.video import _ffmpeg
+
+    jobs = video_job_store.list_for_script(script_id)
+    scene_jobs = [
+        j for j in jobs
+        if j.lesson_ref == lesson_ref
+        and j.status == "completed"
+        and j.video_path
+        and Path(j.video_path).exists()
+    ]
+    if not scene_jobs:
+        raise HTTPException(404, f"No completed renders for {lesson_ref!r} in script {script_id!r}.")
+
+    # Sort by scene_index (None → 0)
+    scene_jobs.sort(key=lambda j: (j.scene_index if j.scene_index is not None else 0))
+
+    # Single scene — stream directly (fast path, no ffmpeg needed)
+    if len(scene_jobs) == 1:
+        path = Path(scene_jobs[0].video_path)
+        file_size = path.stat().st_size
+        range_hdr = request.headers.get("range", "")
+        m = re.match(r"bytes=(\d+)-(\d*)", range_hdr) if range_hdr else None
+        if m:
+            start = int(m.group(1))
+            end   = int(m.group(2)) if m.group(2) else file_size - 1
+            end   = min(end, file_size - 1)
+            length = end - start + 1
+            def _iter_single():
+                with open(path, "rb") as f:
+                    f.seek(start)
+                    rem = length
+                    while rem > 0:
+                        chunk = f.read(min(65536, rem))
+                        if not chunk: break
+                        rem -= len(chunk)
+                        yield chunk
+            return StreamingResponse(_iter_single(), status_code=206, media_type="video/mp4",
+                headers={"Content-Range": f"bytes {start}-{end}/{file_size}",
+                         "Content-Length": str(length), "Accept-Ranges": "bytes"})
+        return FileResponse(str(path), media_type="video/mp4",
+            headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)})
+
+    # Multiple scenes — concatenate with ffmpeg (copy, no re-encode)
+    # Cache key: sorted render_ids joined
+    cache_key = "_".join(j.render_id[:8] for j in scene_jobs)
+    concat_dir = Path("media") / "concat"
+    concat_dir.mkdir(parents=True, exist_ok=True)
+    out_path = concat_dir / f"{lesson_ref.replace('/', '_')}_{cache_key}.mp4"
+
+    if not out_path.exists():
+        # Write ffmpeg concat list file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+            for j in scene_jobs:
+                # ffmpeg concat list: paths must use forward slashes and be absolute
+                tf.write(f"file '{Path(j.video_path).as_posix()}'\n")
+            list_path = tf.name
+        try:
+            subprocess.run(
+                [_ffmpeg(), "-y", "-f", "concat", "-safe", "0",
+                 "-i", list_path,
+                 "-c", "copy", "-movflags", "+faststart",
+                 str(out_path)],
+                check=True, capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(500, f"ffmpeg concat failed: {e.stderr.decode()[-500:]}")
+        finally:
+            Path(list_path).unlink(missing_ok=True)
+
+    # Stream the concatenated file with Range support
+    file_size = out_path.stat().st_size
+    range_hdr = request.headers.get("range", "")
+    m = re.match(r"bytes=(\d+)-(\d*)", range_hdr) if range_hdr else None
+    if m:
+        start = int(m.group(1))
+        end   = int(m.group(2)) if m.group(2) else file_size - 1
+        end   = min(end, file_size - 1)
+        length = end - start + 1
+        def _iter_concat():
+            with open(out_path, "rb") as f:
+                f.seek(start)
+                rem = length
+                while rem > 0:
+                    chunk = f.read(min(65536, rem))
+                    if not chunk: break
+                    rem -= len(chunk)
+                    yield chunk
+        return StreamingResponse(_iter_concat(), status_code=206, media_type="video/mp4",
+            headers={"Content-Range": f"bytes {start}-{end}/{file_size}",
+                     "Content-Length": str(length), "Accept-Ranges": "bytes"})
+    return FileResponse(str(out_path), media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)})
 
 
 @router.get("/renders/{render_id}/download")

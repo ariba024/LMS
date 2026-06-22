@@ -83,9 +83,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   int _kcQuestionIndex = 0;
   bool _kcLoading = false;
 
-  // Scene playlist
-  int _currentSceneIndex = 0;
-
   // Progress tracking
   bool _startRecorded = false;
   bool _progressRecorded = false;
@@ -187,61 +184,23 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
 
   // ── Scene URL builder ──────────────────────────────────────────────────────
   /// Returns scene video URLs in scene_index order (stops at first gap).
-  List<String> _buildSceneUrls(
-    List<VideoRenderJob> renders,
-    String standardRef,
-    String customRef,
-  ) {
-    final completedByScene = <int, String>{};
-    for (final r in renders.where(
-        (r) => (r.lessonRef == standardRef || r.lessonRef == customRef) &&
-               r.videoReady)) {
-      final si = r.sceneIndex ?? 0;
-      // Keep the newest job per scene index (first seen wins; list is newest-first from API)
-      completedByScene.putIfAbsent(
-        si,
-        () => '${ApiConfig.baseUrl}/api/v1/video/renders/${r.renderId}/stream',
-      );
-    }
-    // Sort by scene_index and return all — no gap requirement.
-    // Handles: scene_index=null (→0), non-zero starts, and gaps gracefully.
-    final sorted = completedByScene.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    return sorted.map((e) => e.value).toList();
-  }
-
   // ── Real video callbacks ───────────────────────────────────────────────────
   // Called by _VideoBox once the VideoPlayerController is initialised.
   void _onVideoDurationLoaded(int durationSecs) {
     if (durationSecs > 0) setState(() => _realVideoDurationSecs = durationSecs);
   }
 
-  // Called by _VideoBox when the current scene video ends.
-  // [sceneUrls] is captured from the current build() call.
-  void _onVideoEnded(List<String> sceneUrls) {
+  // Called by _VideoBox when the lesson video ends (all scenes are one MP4).
+  void _onVideoEnded(List<String> _) {
     if (!mounted) return;
-    final nextIdx = _currentSceneIndex + 1;
-    if (nextIdx < sceneUrls.length) {
-      // Advance to the next scene — auto-play it
-      setState(() {
-        _currentSceneIndex   = nextIdx;
-        _realVideoDurationSecs = null;
-        _posSecs             = 0;
-        _playing             = true;
-      });
-      _ticker?.cancel();
-      _track('scene_advance', {'scene': nextIdx, 'total': sceneUrls.length});
-    } else {
-      // All scenes finished — lesson complete
-      final dur = _realVideoDurationSecs ?? 0;
-      setState(() {
-        _playing = false;
-        if (dur > 0) _posSecs = dur;
-      });
-      _ticker?.cancel();
-      _track('lesson_complete');
-      _recordLessonWatched();
-    }
+    final dur = _realVideoDurationSecs ?? 0;
+    setState(() {
+      _playing = false;
+      if (dur > 0) _posSecs = dur;
+    });
+    _ticker?.cancel();
+    _track('lesson_complete');
+    _recordLessonWatched();
   }
 
   // ── Render-poll management ─────────────────────────────────────────────────
@@ -584,10 +543,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       (_, next) => _onRendersChanged(next.valueOrNull),
     );
 
-    // Resolve scene playlist for this lesson
+    // Resolve lesson video URL — backend concatenates all scenes into one MP4
     String? videoUrl;
     String? videoRenderMessage;
-    var sceneUrls = <String>[];
     final rendersAsync = ref.watch(videoRendersProvider(widget.courseId));
     final renders = rendersAsync.valueOrNull;
     if (renders != null) {
@@ -595,12 +553,19 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       final standardRef = 'module_${ids.$1}_lesson_${ids.$2}';
       final customRef   = 'item_${ids.$2 - 1}'; // custom courses: item_0-based
 
-      sceneUrls = _buildSceneUrls(renders, standardRef, customRef);
+      // Check if any completed scene exists for this lesson
+      final hasCompleted = renders.any(
+        (r) => (r.lessonRef == standardRef || r.lessonRef == customRef) && r.videoReady,
+      );
 
-      if (sceneUrls.isNotEmpty) {
-        // Play from the current scene (clamped to available)
-        final si = _currentSceneIndex.clamp(0, sceneUrls.length - 1);
-        videoUrl = sceneUrls[si];
+      if (hasCompleted) {
+        // Use the concat endpoint — backend merges scenes into one video automatically.
+        // For lessons with a single scene this is a no-op passthrough (no ffmpeg cost).
+        final lessonRef = renders.any((r) => r.lessonRef == standardRef && r.videoReady)
+            ? standardRef
+            : customRef;
+        videoUrl =
+            '${ApiConfig.baseUrl}/api/v1/video/scripts/${widget.courseId}/lessons/$lessonRef/stream';
       } else {
         // No completed scenes — check pending / failed status
         final lessonRenders = renders
@@ -631,11 +596,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       questionOverlay: overlay,
       videoUrl: videoUrl,
       renderMessage: videoRenderMessage,
-      sceneIndex: _currentSceneIndex,
-      totalScenes: sceneUrls.length,
+      sceneIndex: 0,
+      totalScenes: 1,
       onRefreshVideo: () => ref.invalidate(videoRendersProvider(widget.courseId)),
       onDurationLoaded: _onVideoDurationLoaded,
-      onVideoEnded: () => _onVideoEnded(sceneUrls),
+      onVideoEnded: () => _onVideoEnded([]),
     );
 
     final tabsSection = _TabsSection(
