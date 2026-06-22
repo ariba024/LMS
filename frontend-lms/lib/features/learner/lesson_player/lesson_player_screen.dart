@@ -197,19 +197,17 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         (r) => (r.lessonRef == standardRef || r.lessonRef == customRef) &&
                r.videoReady)) {
       final si = r.sceneIndex ?? 0;
-      // Keep the newest job per scene index
+      // Keep the newest job per scene index (first seen wins; list is newest-first from API)
       completedByScene.putIfAbsent(
         si,
         () => '${ApiConfig.baseUrl}/api/v1/video/renders/${r.renderId}/stream',
       );
     }
-    final urls = <String>[];
-    for (int i = 0; ; i++) {
-      final url = completedByScene[i];
-      if (url == null) break;
-      urls.add(url);
-    }
-    return urls;
+    // Sort by scene_index and return all — no gap requirement.
+    // Handles: scene_index=null (→0), non-zero starts, and gaps gracefully.
+    final sorted = completedByScene.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return sorted.map((e) => e.value).toList();
   }
 
   // ── Real video callbacks ───────────────────────────────────────────────────
