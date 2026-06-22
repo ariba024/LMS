@@ -749,7 +749,11 @@ Return ONLY the JSON.
         objectives_line  = f"LEARNING OBJECTIVES TO HIT: {parsed['objectives']}" if parsed.get("objectives") else ""
         depth_line       = f"DEPTH: {parsed['depth']}" if parsed.get("depth") else ""
         tone_line        = f"TONE: {parsed['tone']} — maintain this tone throughout the narration." if parsed.get("tone") else ""
-        target_words     = lesson["duration_minutes"] * 120
+        # TTS engines read at ~150-160 wpm; LLMs typically write 70-80% of a soft
+        # target, so we set a hard minimum of duration × 160 to reliably reach the
+        # requested lesson length after TTS conversion.
+        target_words     = lesson["duration_minutes"] * 160
+        min_words        = lesson["duration_minutes"] * 130  # absolute floor
 
         prompt = f"""Script ONE lesson for an educational course.
 
@@ -767,7 +771,7 @@ OUTPUT LANGUAGE: {language}
 MODULE:      {module['module_title']}
 LESSON:      {lesson['lesson_title']}
 TOPIC FOCUS: {lesson['topic_focus']}
-DURATION:    {lesson['duration_minutes']} minutes
+DURATION:    {lesson['duration_minutes']} minutes  →  narration MUST be at least {min_words} words
 AUDIENCE:    {audience}
 
 SOURCE CONTENT (use as your knowledge base):
@@ -777,7 +781,11 @@ WRITING RULES:
 1. narration_script — Write as a teacher SPEAKING to the class in {language}.
    Natural, engaging, first-person plural ("Let's explore...", "Think of it...").
    Do NOT just read the document — explain, give examples, make it memorable.
-   Target: ~{target_words} words (matches {lesson['duration_minutes']} min audio at 120 wpm).
+   *** HARD MINIMUM: {min_words} words. TARGET: {target_words} words. ***
+   The narration is read aloud by TTS at ~150 wpm; {lesson['duration_minutes']} minutes
+   of audio requires at least {min_words} words. Write fully — do not stop early.
+   Expand every concept: add transitions, real examples, numbered steps, recap
+   sentences. Keep writing until you reach the word target.
 2. slide_bullets — 3-5 concise bullet points. Short phrases, not full sentences.
 3. speaker_notes — 1-2 sentences the presenter says while showing the slide.
 4. visual_description — What appears in the video scene?
