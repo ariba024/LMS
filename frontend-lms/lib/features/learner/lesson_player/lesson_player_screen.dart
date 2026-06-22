@@ -83,6 +83,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   int _kcQuestionIndex = 0;
   bool _kcLoading = false;
 
+  // Scene playlist
+  int _currentSceneIndex = 0;
+
   // Progress tracking
   bool _startRecorded = false;
   bool _progressRecorded = false;
@@ -182,23 +185,65 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     ).catchError((_) {});
   }
 
+  // ── Scene URL builder ──────────────────────────────────────────────────────
+  /// Returns scene video URLs in scene_index order (stops at first gap).
+  List<String> _buildSceneUrls(
+    List<VideoRenderJob> renders,
+    String standardRef,
+    String customRef,
+  ) {
+    final completedByScene = <int, String>{};
+    for (final r in renders.where(
+        (r) => (r.lessonRef == standardRef || r.lessonRef == customRef) &&
+               r.videoReady)) {
+      final si = r.sceneIndex ?? 0;
+      // Keep the newest job per scene index
+      completedByScene.putIfAbsent(
+        si,
+        () => '${ApiConfig.baseUrl}/api/v1/video/renders/${r.renderId}/stream',
+      );
+    }
+    final urls = <String>[];
+    for (int i = 0; ; i++) {
+      final url = completedByScene[i];
+      if (url == null) break;
+      urls.add(url);
+    }
+    return urls;
+  }
+
   // ── Real video callbacks ───────────────────────────────────────────────────
   // Called by _VideoBox once the VideoPlayerController is initialised.
   void _onVideoDurationLoaded(int durationSecs) {
     if (durationSecs > 0) setState(() => _realVideoDurationSecs = durationSecs);
   }
 
-  // Called by _VideoBox when the video reaches its end.
-  void _onVideoEnded() {
+  // Called by _VideoBox when the current scene video ends.
+  // [sceneUrls] is captured from the current build() call.
+  void _onVideoEnded(List<String> sceneUrls) {
     if (!mounted) return;
-    final dur = _realVideoDurationSecs ?? 0;
-    setState(() {
-      _playing = false;
-      if (dur > 0) _posSecs = dur;
-    });
-    _ticker?.cancel();
-    _track('lesson_complete');
-    _recordLessonWatched();
+    final nextIdx = _currentSceneIndex + 1;
+    if (nextIdx < sceneUrls.length) {
+      // Advance to the next scene — auto-play it
+      setState(() {
+        _currentSceneIndex   = nextIdx;
+        _realVideoDurationSecs = null;
+        _posSecs             = 0;
+        _playing             = true;
+      });
+      _ticker?.cancel();
+      _track('scene_advance', {'scene': nextIdx, 'total': sceneUrls.length});
+    } else {
+      // All scenes finished — lesson complete
+      final dur = _realVideoDurationSecs ?? 0;
+      setState(() {
+        _playing = false;
+        if (dur > 0) _posSecs = dur;
+      });
+      _ticker?.cancel();
+      _track('lesson_complete');
+      _recordLessonWatched();
+    }
   }
 
   // ── Render-poll management ─────────────────────────────────────────────────
@@ -541,27 +586,39 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       (_, next) => _onRendersChanged(next.valueOrNull),
     );
 
-    // Resolve video URL and render status for this lesson
+    // Resolve scene playlist for this lesson
     String? videoUrl;
     String? videoRenderMessage;
+    var sceneUrls = <String>[];
     final rendersAsync = ref.watch(videoRendersProvider(widget.courseId));
     final renders = rendersAsync.valueOrNull;
     if (renders != null) {
       final ids = _parseIds(widget.lessonId);
       final standardRef = 'module_${ids.$1}_lesson_${ids.$2}';
       final customRef   = 'item_${ids.$2 - 1}'; // custom courses: item_0-based
-      final lessonRenders = renders.where(
-        (r) => r.lessonRef == standardRef || r.lessonRef == customRef,
-      ).toList();
-      final completed = lessonRenders.where((r) => r.videoReady).firstOrNull;
-      if (completed != null) {
-        videoUrl = '${ApiConfig.baseUrl}/api/v1/video/renders/${completed.renderId}/stream';
-      } else if (lessonRenders.isNotEmpty) {
-        final latest = lessonRenders.first;
-        if (latest.status == 'pending' || latest.status == 'processing') {
-          videoRenderMessage = 'Video is being generated — check back in a few minutes';
-        } else if (latest.status == 'failed') {
-          videoRenderMessage = 'Video is unavailable for this lesson.\nAn admin can re-generate it from the Admin panel.';
+
+      sceneUrls = _buildSceneUrls(renders, standardRef, customRef);
+
+      if (sceneUrls.isNotEmpty) {
+        // Play from the current scene (clamped to available)
+        final si = _currentSceneIndex.clamp(0, sceneUrls.length - 1);
+        videoUrl = sceneUrls[si];
+      } else {
+        // No completed scenes — check pending / failed status
+        final lessonRenders = renders
+            .where((r) => r.lessonRef == standardRef || r.lessonRef == customRef)
+            .toList();
+        if (lessonRenders.isNotEmpty) {
+          final hasPending = lessonRenders
+              .any((r) => r.status == 'pending' || r.status == 'processing');
+          if (hasPending) {
+            videoRenderMessage =
+                'Video is being generated — check back in a few minutes';
+          } else if (lessonRenders.any((r) => r.status == 'failed')) {
+            videoRenderMessage =
+                'Video is unavailable for this lesson.\n'
+                'An admin can re-generate it from the Admin panel.';
+          }
         }
       }
     }
@@ -576,9 +633,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       questionOverlay: overlay,
       videoUrl: videoUrl,
       renderMessage: videoRenderMessage,
+      sceneIndex: _currentSceneIndex,
+      totalScenes: sceneUrls.length,
       onRefreshVideo: () => ref.invalidate(videoRendersProvider(widget.courseId)),
       onDurationLoaded: _onVideoDurationLoaded,
-      onVideoEnded: _onVideoEnded,
+      onVideoEnded: () => _onVideoEnded(sceneUrls),
     );
 
     final tabsSection = _TabsSection(
@@ -782,6 +841,8 @@ class _VideoBox extends StatefulWidget {
   final Widget? questionOverlay;
   final String? videoUrl;
   final String? renderMessage;
+  final int sceneIndex;
+  final int totalScenes;
   final VoidCallback? onRefreshVideo;
   final void Function(int durationSecs)? onDurationLoaded;
   final VoidCallback? onVideoEnded;
@@ -795,6 +856,8 @@ class _VideoBox extends StatefulWidget {
     this.questionOverlay,
     this.videoUrl,
     this.renderMessage,
+    this.sceneIndex = 0,
+    this.totalScenes = 1,
     this.onRefreshVideo,
     this.onDurationLoaded,
     this.onVideoEnded,
@@ -1015,6 +1078,10 @@ class _VideoBoxState extends State<_VideoBox> {
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                     const Spacer(),
+                    if (widget.totalScenes > 1) ...[
+                      _pill('${widget.sceneIndex + 1}/${widget.totalScenes}'),
+                      const SizedBox(width: 6),
+                    ],
                     _pill('1×'),
                     const SizedBox(width: 6),
                     _pill('CC'),

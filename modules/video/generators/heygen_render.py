@@ -63,13 +63,21 @@ def is_configured() -> bool:
 
 
 def remaining_credits() -> int | None:
+    """Return remaining HeyGen API credits (not web-quota credits)."""
     if not is_configured():
         return None
     try:
         with _client() as c:
+            # /v2/user/remaining_quota returns web-app quota, not API credits.
+            # Prefer /v2/user/credits if available; fall back to quota field.
             r = c.get("/v2/user/remaining_quota")
             if r.status_code == 200:
-                return int(r.json().get("data", {}).get("remaining_quota", 0))
+                data = r.json().get("data", {})
+                # Some plans expose api_credits separately
+                api_credits = data.get("api_credits")
+                if api_credits is not None:
+                    return int(api_credits)
+                return int(data.get("remaining_quota", 0))
     except Exception:
         pass
     return None
@@ -186,9 +194,11 @@ def _submit(avatar_id: str, voice_id: str, text_segments: list[str]) -> str:
                 "dimension": {"width": 1280, "height": 720},
             })
 
-        if r.status_code == 402 or "insufficient_credit" in r.text:
+        if r.status_code == 402 or "insufficient_credit" in r.text.lower():
             raise HeyGenError(
-                "HeyGen credits exhausted. Top up at app.heygen.com → Billing."
+                "HeyGen API credits exhausted. "
+                "Note: web-quota credits and API credits are separate in HeyGen. "
+                "Purchase API credits at app.heygen.com → Billing → API Credits."
             )
         if r.status_code == 400:
             raise HeyGenError(f"HeyGen submit failed [400]: {r.text}")
@@ -252,6 +262,107 @@ def _download(url: str, out_path: Path) -> Path:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _submit_no_avatar(voice_id: str, text_segments: list[str]) -> str:
+    """POST /v2/video/generate without a character (voice-over + background)."""
+    video_inputs = [
+        {
+            "voice": {
+                "type": "text",
+                "input_text": seg,
+                "voice_id": voice_id,
+                "speed": 1.0,
+            },
+            "background": {
+                "type": "color",
+                "value": "#1e3a5f",
+            },
+        }
+        for seg in text_segments
+    ]
+
+    delay = 5.0
+    last_err = ""
+    for attempt in range(4):
+        with _client() as c:
+            r = c.post("/v2/video/generate", json={
+                "video_inputs": video_inputs,
+                "dimension": {"width": 1280, "height": 720},
+            })
+
+        if r.status_code == 402 or "insufficient_credit" in r.text.lower():
+            raise HeyGenError(
+                "HeyGen API credits exhausted. "
+                "Note: web-quota credits and API credits are separate in HeyGen. "
+                "Purchase API credits at app.heygen.com → Billing → API Credits."
+            )
+        if r.status_code == 400:
+            raise HeyGenError(f"HeyGen submit (no-avatar) failed [400]: {r.text}")
+        if r.status_code == 429 or r.status_code >= 500:
+            last_err = f"HeyGen submit [{r.status_code}]: {r.text}"
+            if attempt < 3:
+                time.sleep(delay)
+                delay = min(delay * 2, 60.0)
+                continue
+            raise HeyGenError(last_err)
+        if r.status_code >= 400:
+            raise HeyGenError(f"HeyGen submit (no-avatar) failed [{r.status_code}]: {r.text}")
+
+        video_id = r.json().get("data", {}).get("video_id")
+        if not video_id:
+            raise HeyGenError(f"No video_id in HeyGen response: {r.text}")
+        return video_id
+
+    raise HeyGenError(last_err or "HeyGen submit failed after retries.")
+
+
+def generate_heygen_animated_video(
+    lesson_id: str,
+    lesson_title: str,
+    lc: LessonContent,
+    style: str,
+    lang: str,
+    out_path: Path,
+    voice_preference: str = "male",
+) -> Path:
+    """
+    HeyGen animated voice-over render — NO avatar/talking head.
+
+    Sends narration + background to HeyGen; the result is a clean
+    voice-over-on-background video suitable for slide-style courses.
+
+    Raises HeyGenNotConfigured if HEYGEN_API_KEY is missing.
+    Raises HeyGenError on API or credit failures.
+    Returns path to the downloaded MP4.
+    """
+    if not is_configured():
+        raise HeyGenNotConfigured(
+            f"Style '{style}' requires HEYGEN_API_KEY in .env."
+        )
+
+    if out_path.exists() and out_path.stat().st_size > 10_000:
+        return out_path
+
+    narration = _build_narration(lesson_title, lc)
+    segments  = _split_text(narration)
+    voice_id  = _pick_voice(lang, voice_preference)
+
+    word_count  = len(narration.split())
+    wpm         = 100 if lang.startswith("hi") else 130
+    est_minutes = word_count / wpm
+    est_credits = int(est_minutes) + 1
+    bal         = remaining_credits()
+    if bal is not None and bal < est_credits:
+        raise HeyGenError(
+            f"Insufficient HeyGen credits: {bal} remaining, "
+            f"~{est_credits} needed for {word_count}-word narration (~{est_minutes:.1f} min). "
+            "Top up at app.heygen.com → Billing."
+        )
+
+    video_id = _submit_no_avatar(voice_id, segments)
+    url      = _poll(video_id)
+    return _download(url, out_path)
+
+
 def generate_heygen_video(
     lesson_id: str,
     lesson_title: str,
@@ -283,11 +394,11 @@ def generate_heygen_video(
     avatar_id      = _pick_avatar(voice_preference)
     voice_id       = _pick_voice(lang, voice_preference)
 
-    # Pre-flight credit check — 10 credits/min; Hindi ~100 wpm, English ~130 wpm
+    # Pre-flight credit check — 1 credit/min (HeyGen pricing); +1 safety margin
     word_count   = len(narration.split())
     wpm          = 100 if lang.startswith("hi") else 130
     est_minutes  = word_count / wpm
-    est_credits  = int(est_minutes * 10) + 5   # +5 safety margin
+    est_credits  = int(est_minutes) + 1   # 1 credit/min, +1 safety margin
     bal          = remaining_credits()
     if bal is not None and bal < est_credits:
         raise HeyGenError(
