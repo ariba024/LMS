@@ -26,7 +26,7 @@ class AdminDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final courses = ref.watch(coursesProvider);
+    final courses = ref.watch(libraryProvider).valueOrNull ?? [];
     final isWide = MediaQuery.of(context).size.width >= 1024;
 
     return Scaffold(

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../data/models/course.dart';
-import '../../../data/providers/app_state.dart';
+import '../../../data/providers/api_providers.dart';
 import 'gamification_hub_screen.dart';
 
 class GamificationCoursesScreen extends ConsumerWidget {
@@ -11,9 +11,8 @@ class GamificationCoursesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final courses = ref.watch(coursesProvider)
-        .where((c) => c.status == 'published')
-        .toList();
+    final coursesAsync = ref.watch(libraryProvider);
+    final learnerId    = ref.watch(learnerIdProvider);
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
@@ -72,7 +71,37 @@ class GamificationCoursesScreen extends ConsumerWidget {
                     letterSpacing: 1.2)),
             const SizedBox(height: 12),
 
-            ...courses.map((c) => _CourseCard(course: c)),
+            coursesAsync.when(
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator(color: ArrestoColors.amber),
+                ),
+              ),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text('Could not load courses: $e',
+                      style: ArrestoText.bodySm()),
+                ),
+              ),
+              data: (courses) {
+                if (courses.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('No published courses yet.',
+                          style: ArrestoText.bodySm()),
+                    ),
+                  );
+                }
+                return Column(
+                  children: courses
+                      .map((c) => _CourseCard(course: c, learnerId: learnerId))
+                      .toList(),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -81,21 +110,24 @@ class GamificationCoursesScreen extends ConsumerWidget {
 }
 
 class _CourseCard extends StatelessWidget {
-  final Course course;
-  const _CourseCard({required this.course});
+  final Course  course;
+  final String  learnerId;
+  const _CourseCard({required this.course, required this.learnerId});
 
   @override
   Widget build(BuildContext context) {
+    void open() {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => GamificationHubScreen(
+          courseId:    course.id,
+          courseTitle: course.title,
+          learnerId:   learnerId,
+        ),
+      ));
+    }
+
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => GamificationHubScreen(
-            courseId: course.id,
-            courseTitle: course.title,
-            learnerId: 'james.h',
-          ),
-        ));
-      },
+      onTap: open,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
@@ -128,25 +160,17 @@ class _CourseCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 2),
                   Text('${course.cat} · ${course.level}',
-                      style:
-                          ArrestoText.xs(color: ArrestoColors.textMuted)),
+                      style: ArrestoText.xs(color: ArrestoColors.textMuted)),
                 ],
               ),
             ),
             const SizedBox(width: 8),
             FilledButton(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => GamificationHubScreen(
-                    courseId: course.id,
-                    courseTitle: course.title,
-                    learnerId: 'james.h',
-                  ),
-                ));
-              },
+              onPressed: open,
               style: FilledButton.styleFrom(
                 backgroundColor: ArrestoColors.ink,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
