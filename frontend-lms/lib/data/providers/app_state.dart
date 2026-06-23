@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../models/course.dart';
 import '../models/learner.dart';
 import '../models/lesson.dart';
@@ -9,7 +10,10 @@ import '../../core/widgets/course_thumb.dart';
 // ─── Role ────────────────────────────────────────────────────────────────────
 enum UserRole { learner, admin }
 
-final roleProvider = StateProvider<UserRole>((ref) => UserRole.learner);
+final roleProvider = Provider<UserRole>((ref) {
+  final user = ref.watch(authProvider).user;
+  return user?.isAdmin == true ? UserRole.admin : UserRole.learner;
+});
 
 // ─── Mock Courses ─────────────────────────────────────────────────────────────
 final mockCourses = [
