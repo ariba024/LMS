@@ -62,8 +62,7 @@ def _lookup_lesson(course_id: str, lesson_id: str) -> tuple[str, str] | None:
         from api.db import SessionLocal
         from api.models.courses import CourseScriptRow
 
-        db = SessionLocal()
-        try:
+        with SessionLocal() as db:
             row = db.query(CourseScriptRow).filter(
                 CourseScriptRow.script_id == course_id
             ).first()
@@ -77,8 +76,6 @@ def _lookup_lesson(course_id: str, lesson_id: str) -> tuple[str, str] | None:
                             title     = les.get("lesson_title", "")
                             narration = les.get("narration_script", "")
                             return (title, narration) if narration else None
-        finally:
-            db.close()
     except Exception:
         pass
     return None

@@ -157,8 +157,7 @@ def _lookup_lesson_transcript(course_id: str, lesson_id: str) -> tuple[str, str]
         module_num = int(m.group(1))
         lesson_num = int(m.group(2))
 
-        db = SessionLocal()
-        try:
+        with SessionLocal() as db:
             row = db.query(CourseScriptRow).filter(
                 CourseScriptRow.script_id == course_id
             ).first()
@@ -172,8 +171,6 @@ def _lookup_lesson_transcript(course_id: str, lesson_id: str) -> tuple[str, str]
                             title     = les.get("lesson_title", "")
                             narration = les.get("narration_script", "")
                             return (title, narration) if narration else None
-        finally:
-            db.close()
     except Exception:
         pass
     return None
