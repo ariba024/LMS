@@ -309,6 +309,31 @@ async def generate_course_from_blueprint(
     )
 
 
+@router.get("/jobs", tags=["Course Generation"])
+def list_course_jobs(_=Depends(require_admin)):
+    """
+    List all course generation jobs, newest first. Admin only.
+    Returns up to 10 most recent jobs with their status and progress.
+    """
+    jobs = job_store.list_course_jobs()[:10]
+    return [
+        {
+            "job_id": j.job_id,
+            "status": j.status,
+            "title": (
+                j.course_script.get("course_title", j.source_file)
+                if j.course_script else j.source_file
+            ),
+            "progress": (
+                round(j.completed_lessons / j.total_lessons, 2)
+                if j.total_lessons > 0 else (1.0 if j.status == "completed" else 0.0)
+            ),
+            "started_at": j.started_at,
+        }
+        for j in jobs
+    ]
+
+
 @router.get("/jobs/{job_id}", response_model=CourseJobStatus,
             responses={404: {"model": ErrorDetail}})
 def get_course_job(job_id: str, _=Depends(require_admin)):

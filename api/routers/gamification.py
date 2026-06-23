@@ -25,6 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+
 from api.config import settings
 from api.db import get_db
 from api.dependencies import get_current_user, require_admin
@@ -99,6 +101,46 @@ def _get_or_create_xp(learner_id: str, course_id: str, db: Session) -> LearnerXP
         db.add(row)
         db.flush()
     return row
+
+
+# ── Aggregate stats ───────────────────────────────────────────────────────────
+
+class LearnerGamificationStats(BaseModel):
+    max_streak: int
+    total_xp: int
+    total_lessons_completed: int
+
+
+@router.get("/me/stats", response_model=LearnerGamificationStats)
+def get_my_gamification_stats(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Aggregate gamification stats for the authenticated user across all courses."""
+    from api.models.progress import LessonRecordRow
+
+    xp_rows = db.query(LearnerXPRow).filter(
+        LearnerXPRow.learner_id == current_user.email
+    ).all()
+
+    max_streak = max((r.daily_q_streak for r in xp_rows), default=0)
+    total_xp = sum(r.total_xp for r in xp_rows)
+
+    lessons_completed = (
+        db.query(func.count(LessonRecordRow.learner_id))
+        .filter(
+            LessonRecordRow.learner_id == current_user.email,
+            LessonRecordRow.completed_at.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    return LearnerGamificationStats(
+        max_streak=max_streak,
+        total_xp=total_xp,
+        total_lessons_completed=lessons_completed,
+    )
 
 
 # ── Daily Question ─────────────────────────────────────────────────────────────

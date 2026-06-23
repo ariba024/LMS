@@ -278,6 +278,10 @@ class JobStore:
     def get_course(self, job_id: str) -> _CourseJob | None:
         return self._courses.get(job_id.strip())
 
+    def list_course_jobs(self) -> list[_CourseJob]:
+        """Return all course jobs sorted newest-first (by started_at)."""
+        return sorted(self._courses.values(), key=lambda j: j.started_at, reverse=True)
+
 
 # Global singleton
 job_store = JobStore()
