@@ -25,6 +25,7 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
   String _search   = '';
   String _status   = 'All';
   String _viewMode = 'Grid';
+  final Set<String> _selectedIds = {};
 
   void _view(BuildContext ctx, Course course) {
     ctx.go('/learner/course/${course.id}');
@@ -67,6 +68,72 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
         onSaved: () => ref.invalidate(libraryProvider),
       ),
     );
+  }
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _bulkPublish(bool publish) async {
+    final ids = List<String>.from(_selectedIds);
+    int done = 0;
+    for (final id in ids) {
+      try {
+        if (publish) {
+          await CourseService.publishCourse(id);
+        } else {
+          await CourseService.unpublishCourse(id);
+        }
+        done++;
+      } catch (_) {}
+    }
+    setState(() => _selectedIds.clear());
+    ref.invalidate(libraryProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$done course${done == 1 ? '' : 's'} ${publish ? 'published' : 'unpublished'}.'),
+      ));
+    }
+  }
+
+  Future<void> _bulkDelete() async {
+    final ids = List<String>.from(_selectedIds);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Delete Courses'),
+        content: Text('Delete ${ids.length} selected course${ids.length == 1 ? '' : 's'}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            style: TextButton.styleFrom(foregroundColor: ArrestoColors.red),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    int done = 0;
+    for (final id in ids) {
+      try {
+        await CourseService.deleteScript(id);
+        done++;
+      } catch (_) {}
+    }
+    setState(() => _selectedIds.clear());
+    ref.invalidate(libraryProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$done course${done == 1 ? '' : 's'} deleted.'),
+      ));
+    }
   }
 
   Future<void> _confirmDelete(BuildContext ctx, Course course) async {
@@ -224,7 +291,16 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                Text('${filtered.length} results', style: ArrestoText.small()),
+                if (_selectedIds.isNotEmpty)
+                  _BulkActionBar(
+                    count: _selectedIds.length,
+                    onPublish: () => _bulkPublish(true),
+                    onUnpublish: () => _bulkPublish(false),
+                    onDelete: _bulkDelete,
+                    onClear: () => setState(() => _selectedIds.clear()),
+                  ),
+                if (_selectedIds.isEmpty)
+                  Text('${filtered.length} results', style: ArrestoText.small()),
                 const SizedBox(height: 12),
               ],
             ),
@@ -265,6 +341,8 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
               itemCount: filtered.length,
               itemBuilder: (ctx, i) => _AdminCourseCard(
                 course: filtered[i],
+                selected: _selectedIds.contains(filtered[i].id),
+                onToggleSelect: () => _toggleSelect(filtered[i].id),
                 onView: () => _view(ctx, filtered[i]),
                 onEdit: () => _showEditSheet(ctx, filtered[i]),
                 onGenerateVideo: () => _generateVideos(ctx, filtered[i]),
@@ -278,6 +356,8 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _CoursesTable(
                 courses: filtered,
+                selectedIds: _selectedIds,
+                onToggleSelect: _toggleSelect,
                 onEdit: (c) => _showEditSheet(context, c),
                 onDelete: (c) => _confirmDelete(context, c),
                 onGenerateVideo: (c) => _generateVideos(context, c),
@@ -331,6 +411,8 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
 
 class _AdminCourseCard extends StatelessWidget {
   final Course course;
+  final bool selected;
+  final VoidCallback onToggleSelect;
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onGenerateVideo;
@@ -338,6 +420,8 @@ class _AdminCourseCard extends StatelessWidget {
 
   const _AdminCourseCard({
     required this.course,
+    required this.selected,
+    required this.onToggleSelect,
     required this.onView,
     required this.onEdit,
     required this.onGenerateVideo,
@@ -346,7 +430,9 @@ class _AdminCourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ArrestoCard(
+    return Stack(
+      children: [
+        ArrestoCard(
       padding: EdgeInsets.zero,
       onTap: onView,
       child: Column(
@@ -440,6 +526,34 @@ class _AdminCourseCard extends StatelessWidget {
           ),
         ],
       ),
+        ),
+        Positioned(
+          top: 8,
+          left: 8,
+          child: GestureDetector(
+            onTap: onToggleSelect,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: selected ? ArrestoColors.orange : Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: selected ? ArrestoColors.orange : ArrestoColors.line,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4),
+                ],
+              ),
+              child: selected
+                  ? const Icon(Icons.check_rounded, size: 15, color: Colors.white)
+                  : null,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -448,12 +562,16 @@ class _AdminCourseCard extends StatelessWidget {
 
 class _CoursesTable extends StatelessWidget {
   final List<Course> courses;
+  final Set<String> selectedIds;
+  final void Function(String) onToggleSelect;
   final void Function(Course) onEdit;
   final void Function(Course) onDelete;
   final void Function(Course) onGenerateVideo;
 
   const _CoursesTable({
     required this.courses,
+    required this.selectedIds,
+    required this.onToggleSelect,
     required this.onEdit,
     required this.onDelete,
     required this.onGenerateVideo,
@@ -468,6 +586,7 @@ class _CoursesTable extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(children: [
+              const SizedBox(width: 32),
               Expanded(
                   flex: 3,
                   child: Text('Course', style: ArrestoText.smallBold())),
@@ -483,6 +602,8 @@ class _CoursesTable extends StatelessWidget {
           const Divider(height: 1, color: ArrestoColors.line),
           ...courses.map((c) => _TableRow(
                 course: c,
+                selected: selectedIds.contains(c.id),
+                onToggleSelect: () => onToggleSelect(c.id),
                 onEdit: () => onEdit(c),
                 onDelete: () => onDelete(c),
                 onGenerateVideo: () => onGenerateVideo(c),
@@ -495,12 +616,16 @@ class _CoursesTable extends StatelessWidget {
 
 class _TableRow extends StatelessWidget {
   final Course course;
+  final bool selected;
+  final VoidCallback onToggleSelect;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onGenerateVideo;
 
   const _TableRow({
     required this.course,
+    required this.selected,
+    required this.onToggleSelect,
     required this.onEdit,
     required this.onDelete,
     required this.onGenerateVideo,
@@ -509,13 +634,34 @@ class _TableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(
+      decoration: BoxDecoration(
+        color: selected ? ArrestoColors.orange.withValues(alpha: 0.05) : null,
+        border: const Border(
             bottom: BorderSide(color: ArrestoColors.line, width: 0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(children: [
+          GestureDetector(
+            onTap: onToggleSelect,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: selected ? ArrestoColors.orange : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: selected ? ArrestoColors.orange : ArrestoColors.line,
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? const Icon(Icons.check_rounded, size: 13, color: Colors.white)
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 10),
           SizedBox(
             width: 36,
             height: 36,
@@ -564,6 +710,67 @@ class _TableRow extends StatelessWidget {
           ]),
         ]),
       ),
+    );
+  }
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+class _BulkActionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onPublish;
+  final VoidCallback onUnpublish;
+  final VoidCallback onDelete;
+  final VoidCallback onClear;
+
+  const _BulkActionBar({
+    required this.count,
+    required this.onPublish,
+    required this.onUnpublish,
+    required this.onDelete,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: ArrestoColors.ink,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        Text('$count selected',
+            style: ArrestoText.bodySm(color: Colors.white)),
+        const SizedBox(width: 12),
+        ArrestoButton(
+          label: 'Publish',
+          size: ArrestoButtonSize.sm,
+          onPressed: onPublish,
+        ),
+        const SizedBox(width: 8),
+        ArrestoButton(
+          label: 'Unpublish',
+          size: ArrestoButtonSize.sm,
+          variant: ArrestoButtonVariant.ghost,
+          onPressed: onUnpublish,
+        ),
+        const SizedBox(width: 8),
+        ArrestoButton(
+          label: 'Delete',
+          size: ArrestoButtonSize.sm,
+          variant: ArrestoButtonVariant.ghost,
+          onPressed: onDelete,
+        ),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.close_rounded, size: 18, color: Colors.white54),
+          onPressed: onClear,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        ),
+      ]),
     );
   }
 }

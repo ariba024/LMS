@@ -147,6 +147,25 @@ class LeaderboardEntry {
       );
 }
 
+class LearnerGamificationStats {
+  final int maxStreak;
+  final int totalXp;
+  final int totalLessonsCompleted;
+
+  const LearnerGamificationStats({
+    required this.maxStreak,
+    required this.totalXp,
+    required this.totalLessonsCompleted,
+  });
+
+  factory LearnerGamificationStats.fromJson(Map<String, dynamic> j) =>
+      LearnerGamificationStats(
+        maxStreak: j['max_streak'] as int,
+        totalXp: j['total_xp'] as int,
+        totalLessonsCompleted: j['total_lessons_completed'] as int,
+      );
+}
+
 class GamificationProfile {
   final String learnerId;
   final String courseId;

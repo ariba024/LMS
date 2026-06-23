@@ -195,6 +195,7 @@ class _StatsStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final coursesAsync = ref.watch(libraryProvider);
     final historyAsync = ref.watch(assessmentHistoryProvider);
+    final statsAsync = ref.watch(gamificationStatsProvider);
 
     final courseCount = coursesAsync.maybeWhen(
       data: (c) => '${c.length}',
@@ -207,6 +208,14 @@ class _StatsStrip extends ConsumerWidget {
         ).length;
         return '$passed';
       },
+      orElse: () => '—',
+    );
+    final lessonsCompleted = statsAsync.maybeWhen(
+      data: (s) => '${s.totalLessonsCompleted}',
+      orElse: () => '—',
+    );
+    final streak = statsAsync.maybeWhen(
+      data: (s) => s.maxStreak > 0 ? '${s.maxStreak}d' : '0',
       orElse: () => '—',
     );
 
@@ -232,9 +241,9 @@ class _StatsStrip extends ConsumerWidget {
               iconColor: ArrestoColors.amber,
               barColor: ArrestoColors.amber,
             ),
-            const StatCard(
+            StatCard(
               title: 'Lessons Completed',
-              value: '—',
+              value: lessonsCompleted,
               icon: Icons.check_circle_rounded,
               iconColor: ArrestoColors.green,
               barColor: ArrestoColors.green,
@@ -246,9 +255,9 @@ class _StatsStrip extends ConsumerWidget {
               iconColor: ArrestoColors.orange,
               barColor: ArrestoColors.orange,
             ),
-            const StatCard(
+            StatCard(
               title: 'Learning Streak',
-              value: '—',
+              value: streak,
               icon: Icons.local_fire_department_rounded,
               iconColor: ArrestoColors.red,
               barColor: ArrestoColors.red,

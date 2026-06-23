@@ -94,6 +94,8 @@ class _AdminStatsGrid extends ConsumerWidget {
     final libraryAsync = ref.watch(libraryProvider);
     final analyticsAsync = ref.watch(analyticsOverviewProvider);
 
+    final jobsAsync = ref.watch(courseJobsProvider);
+
     final courseCount = libraryAsync.maybeWhen(
       data: (courses) => courses.length.toString(),
       orElse: () => '—',
@@ -111,6 +113,16 @@ class _AdminStatsGrid extends ConsumerWidget {
           ? '${(o.activeLearners * 100 ~/ o.totalLearners)}% of total'
           : null,
       orElse: () => null,
+    );
+    final coursesGenerated = jobsAsync.maybeWhen(
+      data: (jobs) =>
+          jobs.where((j) => j.status == 'completed').length.toString(),
+      orElse: () => '—',
+    );
+    final generatingNow = jobsAsync.maybeWhen(
+      data: (jobs) =>
+          jobs.where((j) => j.status == 'running' || j.status == 'pending').length.toString(),
+      orElse: () => '—',
     );
 
     return LayoutBuilder(builder: (ctx, c) {
@@ -145,9 +157,9 @@ class _AdminStatsGrid extends ConsumerWidget {
             iconColor: ArrestoColors.green,
             barColor: ArrestoColors.green,
           ),
-          const StatCard(
+          StatCard(
             title: 'Courses Generated',
-            value: '—',
+            value: coursesGenerated,
             icon: Icons.auto_awesome_rounded,
             iconColor: ArrestoColors.orange,
             barColor: ArrestoColors.orange,
@@ -166,9 +178,9 @@ class _AdminStatsGrid extends ConsumerWidget {
             iconColor: ArrestoColors.amber,
             barColor: ArrestoColors.amber,
           ),
-          const StatCard(
+          StatCard(
             title: 'Generating Now',
-            value: '—',
+            value: generatingNow,
             icon: Icons.sync_rounded,
             iconColor: ArrestoColors.red,
             barColor: ArrestoColors.red,
@@ -337,9 +349,11 @@ class _CourseRow extends StatelessWidget {
   }
 }
 
-class _AdminSidebar extends StatelessWidget {
+class _AdminSidebar extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final jobsAsync = ref.watch(courseJobsProvider);
+
     return Column(
       children: [
         // Recent activity
@@ -378,43 +392,114 @@ class _AdminSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // Generation queue
+        // Generation queue — real data from /api/v1/courses/jobs
         ArrestoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Generation Queue', style: ArrestoText.h4()),
               const SizedBox(height: 12),
-              ...[
-                ('Rope Access Safety', 0.7),
-                ('PPE Selection Guide', 0.3),
-              ].map((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Column(
+              jobsAsync.when(
+                loading: () => const Center(
+                    child: SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2))),
+                error: (_, __) => Text('Could not load jobs',
+                    style: ArrestoText.xs(color: ArrestoColors.textMuted)),
+                data: (jobs) {
+                  final active = jobs
+                      .where((j) =>
+                          j.status == 'running' || j.status == 'pending')
+                      .toList();
+                  final failed = jobs
+                      .where((j) => j.status == 'failed')
+                      .toList();
+                  if (active.isEmpty && failed.isEmpty) {
+                    return Text('No active jobs',
+                        style:
+                            ArrestoText.bodySm(color: ArrestoColors.textMuted));
+                  }
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                              child: Text(item.$1,
-                                  style: ArrestoText.bodySm(
-                                      color: ArrestoColors.ink))),
-                          Text(
-                              '${(item.$2 * 100).round()}%',
-                              style: ArrestoText.small()),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      AnimatedArrestoProgressBar(
-                        value: item.$2,
-                        tone: ProgressTone.orange,
-                        height: 6,
-                      ),
+                      ...active.map((job) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                      child: Text(job.title,
+                                          style: ArrestoText.bodySm(
+                                              color: ArrestoColors.ink),
+                                          overflow: TextOverflow.ellipsis)),
+                                  Text('${(job.progress * 100).round()}%',
+                                      style: ArrestoText.small()),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              AnimatedArrestoProgressBar(
+                                value: job.progress,
+                                tone: ProgressTone.orange,
+                                height: 6,
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      if (failed.isNotEmpty) ...[
+                        if (active.isNotEmpty) const SizedBox(height: 4),
+                        ...failed.map((job) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: ArrestoColors.redSoft,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: ArrestoColors.red.withValues(alpha: 0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.error_outline_rounded,
+                                        size: 14, color: ArrestoColors.red),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(job.title,
+                                          style: ArrestoText.bodySm(color: ArrestoColors.red),
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                                if (job.error != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(job.error!,
+                                      style: ArrestoText.xs(color: ArrestoColors.red),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                                const SizedBox(height: 6),
+                                GestureDetector(
+                                  onTap: () => context.go('/admin/generator'),
+                                  child: Text('Retry in Generator →',
+                                      style: ArrestoText.xs(color: ArrestoColors.red)
+                                          .copyWith(fontWeight: FontWeight.w600,
+                                              decoration: TextDecoration.underline)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )),
+                      ],
                     ],
-                  ),
-                );
-              }),
+                  );
+                },
+              ),
             ],
           ),
         ),

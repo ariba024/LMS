@@ -11,6 +11,7 @@ import '../../core/services/progress_service.dart';
 import '../../core/services/tutor_service.dart';
 import '../../core/services/video_service.dart';
 import '../models/course.dart';
+import '../models/gamification.dart' show LearnerGamificationStats;
 import '../models/learner.dart';
 import '../models/lesson.dart' show CourseLesson;
 import '../models/notification_model.dart';
@@ -278,6 +279,63 @@ final enrolledCourseIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) 
     return ids.toSet();
   } catch (_) {
     return const <String>{};
+  }
+});
+
+// ── Learner gamification aggregate stats ─────────────────────────────────────
+// Calls GET /api/v1/gamification/me/stats — returns max streak, total XP,
+// and total lessons completed across all courses. Falls back to zeroes on error.
+final gamificationStatsProvider =
+    FutureProvider.autoDispose<LearnerGamificationStats>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/gamification/me/stats');
+    return LearnerGamificationStats.fromJson(
+        resp.data as Map<String, dynamic>);
+  } catch (_) {
+    return const LearnerGamificationStats(
+        maxStreak: 0, totalXp: 0, totalLessonsCompleted: 0);
+  }
+});
+
+// ── Admin: course generation jobs ────────────────────────────────────────────
+// Calls GET /api/v1/courses/jobs — returns up to 10 most recent jobs.
+// Each job: {job_id, status, title, progress (0–1), started_at}.
+class CourseJob {
+  final String jobId;
+  final String status; // pending | running | completed | failed
+  final String title;
+  final double progress; // 0–1
+  final String? sourceFile;
+  final String? error;
+
+  const CourseJob({
+    required this.jobId,
+    required this.status,
+    required this.title,
+    required this.progress,
+    this.sourceFile,
+    this.error,
+  });
+
+  factory CourseJob.fromJson(Map<String, dynamic> j) => CourseJob(
+        jobId: j['job_id'] as String,
+        status: j['status'] as String,
+        title: j['title'] as String? ?? 'Untitled',
+        progress: (j['progress'] as num).toDouble(),
+        sourceFile: j['source_file'] as String?,
+        error: j['error'] as String?,
+      );
+}
+
+final courseJobsProvider =
+    FutureProvider.autoDispose<List<CourseJob>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/courses/jobs');
+    return (resp.data as List)
+        .map((e) => CourseJob.fromJson(e as Map<String, dynamic>))
+        .toList();
+  } catch (_) {
+    return const [];
   }
 });
 

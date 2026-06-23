@@ -61,6 +61,24 @@ class DocumentService {
     );
   }
 
+  /// Upload multiple files in one request via POST /documents/batch-upload.
+  /// Returns a list of per-file results: {filename, status, chunks, error}.
+  static Future<List<Map<String, dynamic>>> batchUploadDocuments(
+      List<({String name, List<int> bytes})> files) async {
+    final formData = FormData.fromMap({
+      'files': files
+          .map((f) => MultipartFile.fromBytes(f.bytes, filename: f.name))
+          .toList(),
+    });
+    final resp = await apiClient.post(
+      '/api/v1/documents/batch-upload',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(minutes: 15)),
+    );
+    final results = (resp.data as Map<String, dynamic>)['results'] as List? ?? [];
+    return results.cast<Map<String, dynamic>>();
+  }
+
   /// URL for downloading the original file from the backend.
   static String downloadUrl(String sourceFile) {
     final encoded = Uri.encodeComponent(sourceFile);

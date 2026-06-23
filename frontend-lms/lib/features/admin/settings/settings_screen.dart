@@ -372,29 +372,37 @@ class _KnowledgeBaseSettingsState
   void _pickAndUpload() {
     final input = html.FileUploadInputElement()
       ..accept = '.pdf,.docx,.pptx,.txt,.csv'
-      ..multiple = false;
+      ..multiple = true;
     input.click();
     input.onChange.listen((event) async {
-      final file = input.files?.first;
-      if (file == null) return;
+      final files = input.files;
+      if (files == null || files.isEmpty) return;
       setState(() {
         _uploading = true;
         _uploadError = null;
         _uploadSuccess = null;
       });
       try {
-        final reader = html.FileReader();
-        reader.readAsArrayBuffer(file);
-        await reader.onLoadEnd.first;
-        final raw = reader.result;
-        final bytes = raw is ByteBuffer
-            ? raw.asUint8List()
-            : Uint8List.fromList(raw as List<int>);
-        await DocumentService.uploadDocument(bytes, file.name);
+        final loaded = <({String name, List<int> bytes})>[];
+        for (final file in files) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file);
+          await reader.onLoadEnd.first;
+          final raw = reader.result;
+          final bytes = raw is ByteBuffer
+              ? raw.asUint8List()
+              : Uint8List.fromList(raw as List<int>);
+          loaded.add((name: file.name, bytes: bytes));
+        }
+        final results = await DocumentService.batchUploadDocuments(loaded);
         if (!mounted) return;
+        final succeeded = results.where((r) => r['status'] == 'ok').length;
+        final failed = results.length - succeeded;
         setState(() {
           _uploading = false;
-          _uploadSuccess = '${file.name} uploaded successfully.';
+          _uploadSuccess = failed == 0
+              ? '$succeeded file${succeeded == 1 ? '' : 's'} uploaded successfully.'
+              : '$succeeded uploaded, $failed failed — check file formats.';
         });
         ref.invalidate(documentsNotifierProvider);
       } catch (e) {
@@ -484,7 +492,7 @@ class _KnowledgeBaseSettingsState
                                   size: 32,
                                   color: ArrestoColors.textMuted2),
                               const SizedBox(height: 6),
-                              Text('Click to upload a file',
+                              Text('Click to upload files',
                                   style: ArrestoText.bodyMd()),
                               Text(
                                   'PDF, DOCX, PPTX, TXT, CSV',

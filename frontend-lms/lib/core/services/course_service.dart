@@ -133,6 +133,10 @@ class CourseService {
     );
   }
 
+  /// Unpublish a course (set back to draft).
+  static Future<void> unpublishCourse(String scriptId) =>
+      publishCourse(scriptId, publishMode: 'draft', notifyLearners: false);
+
   /// Convert a full library-detail response (from getCourseDetail) to a Course.
   static Course courseFromDetail(Map<String, dynamic> detail) =>
       _courseFromApi(detail);

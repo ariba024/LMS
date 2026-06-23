@@ -324,6 +324,8 @@ def list_course_jobs(_=Depends(require_admin)):
                 j.course_script.get("course_title", j.source_file)
                 if j.course_script else j.source_file
             ),
+            "source_file": j.source_file,
+            "error": j.error,
             "progress": (
                 round(j.completed_lessons / j.total_lessons, 2)
                 if j.total_lessons > 0 else (1.0 if j.status == "completed" else 0.0)
