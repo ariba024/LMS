@@ -19,6 +19,8 @@ import '../../../core/services/course_service.dart';
 import '../../../core/services/question_service.dart';
 import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/services/video_service.dart' show VideoRenderJob;
+import '../../../core/services/focus_detection_service.dart';
+import 'focus_overlay.dart';
 import '../../../data/models/lesson.dart' show CourseLesson;
 import '../../../data/models/course.dart';
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
@@ -83,6 +85,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   int _kcQuestionIndex = 0;
   bool _kcLoading = false;
 
+  // Focus detection
+  final _focusSvc = FocusDetectionService();
+  StreamSubscription<FocusStatus>? _focusSub;
+  FocusStatus _focusStatus = FocusStatus.inactive;
+  bool _cameraEnabled = false;
+  bool _showDistractedOverlay = false;
+
   // Progress tracking
   bool _startRecorded = false;
   bool _progressRecorded = false;
@@ -107,6 +116,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   void dispose() {
     _ticker?.cancel();
     _renderPollTimer?.cancel();
+    _focusSub?.cancel();
+    _focusSvc.dispose();
     _noteCtrl.dispose();
     _noteSearchCtrl.dispose();
     _transcriptSearchCtrl.dispose();
@@ -328,6 +339,44 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   void _toggleMute() {
     setState(() => _muted = !_muted);
     _track('mute_toggle', {'muted': _muted});
+  }
+
+  Future<void> _toggleCamera() async {
+    if (_cameraEnabled) {
+      _focusSvc.stop();
+      _focusSub?.cancel();
+      setState(() {
+        _cameraEnabled = false;
+        _focusStatus = FocusStatus.inactive;
+        _showDistractedOverlay = false;
+      });
+      return;
+    }
+    final ok = await _focusSvc.start();
+    if (!ok) {
+      _toast('Camera permission required for focus monitoring');
+      return;
+    }
+    _focusSub = _focusSvc.statusStream.listen(_onFocusStatus);
+    setState(() => _cameraEnabled = true);
+    _toast('Focus monitoring active');
+    _track('focus_monitoring_started');
+  }
+
+  void _onFocusStatus(FocusStatus status) {
+    if (!mounted) return;
+    setState(() => _focusStatus = status);
+    if (status == FocusStatus.distracted && _playing) {
+      _togglePlay();
+      setState(() => _showDistractedOverlay = true);
+      _track('focus_distracted', {'posSecs': _posSecs});
+    }
+  }
+
+  void _onFocusReturn() {
+    setState(() => _showDistractedOverlay = false);
+    if (!_playing) _togglePlay();
+    _track('focus_returned', {'posSecs': _posSecs});
   }
 
   void _onQuestionSubmit(QuestionResult result) {
@@ -601,6 +650,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       onRefreshVideo: () => ref.invalidate(videoRendersProvider(widget.courseId)),
       onDurationLoaded: _onVideoDurationLoaded,
       onVideoEnded: () => _onVideoEnded([]),
+      cameraEnabled: _cameraEnabled,
+      focusStatus: _focusStatus,
+      showDistractedOverlay: _showDistractedOverlay,
+      onToggleCamera: _toggleCamera,
+      onFocusReturn: _onFocusReturn,
     );
 
     final tabsSection = _TabsSection(
@@ -809,6 +863,12 @@ class _VideoBox extends StatefulWidget {
   final VoidCallback? onRefreshVideo;
   final void Function(int durationSecs)? onDurationLoaded;
   final VoidCallback? onVideoEnded;
+  // Focus detection
+  final bool cameraEnabled;
+  final FocusStatus focusStatus;
+  final bool showDistractedOverlay;
+  final Future<void> Function() onToggleCamera;
+  final VoidCallback onFocusReturn;
 
   const _VideoBox({
     required this.lesson, required this.posSecs, required this.dur,
@@ -824,6 +884,11 @@ class _VideoBox extends StatefulWidget {
     this.onRefreshVideo,
     this.onDurationLoaded,
     this.onVideoEnded,
+    this.cameraEnabled = false,
+    this.focusStatus = FocusStatus.inactive,
+    this.showDistractedOverlay = false,
+    required this.onToggleCamera,
+    required this.onFocusReturn,
   });
 
   @override
@@ -1072,12 +1137,21 @@ class _VideoBoxState extends State<_VideoBox> {
                     const SizedBox(width: 6),
                     _ctrl(Icons.note_alt_outlined, widget.onNotesShortcut),
                     _ctrl(Icons.fullscreen_rounded, widget.onFullscreen),
+                    const SizedBox(width: 4),
+                    _FocusCameraButton(
+                      enabled: widget.cameraEnabled,
+                      status: widget.focusStatus,
+                      onTap: widget.onToggleCamera,
+                    ),
                   ]),
                 ]),
               ),
             ),
 
             if (widget.questionOverlay != null) widget.questionOverlay!,
+
+            if (widget.showDistractedOverlay)
+              FocusDistractedOverlay(onBack: widget.onFocusReturn),
           ],
         ),
       ),
@@ -1099,6 +1173,64 @@ class _VideoBoxState extends State<_VideoBox> {
         ),
         child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
       );
+}
+
+// ── Focus camera toggle button ────────────────────────────────────────────────
+class _FocusCameraButton extends StatelessWidget {
+  final bool enabled;
+  final FocusStatus status;
+  final Future<void> Function() onTap;
+  const _FocusCameraButton({required this.enabled, required this.status, required this.onTap});
+
+  Color get _dotColor {
+    return switch (status) {
+      FocusStatus.focused   => const Color(0xFF22C55E),
+      FocusStatus.warning   => const Color(0xFFF59E0B),
+      FocusStatus.distracted => const Color(0xFFEF4444),
+      _                    => Colors.white54,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: enabled
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: enabled ? Colors.white38 : Colors.white24,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              enabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+              color: enabled ? Colors.white : Colors.white54,
+              size: 16,
+            ),
+            if (enabled) ...[
+              const SizedBox(width: 5),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: _dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Tabs section (shared by both layouts) ─────────────────────────────────────
