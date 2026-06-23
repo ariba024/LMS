@@ -1,6 +1,7 @@
 """
 api/routers/progress.py -- Learner progress and adaptive learning route endpoints.
 
+GET  /api/v1/progress/me/enrolled-courses               Courses the authenticated learner has started
 GET  /api/v1/progress/{learner_id}/course/{course_id}   Full progress for a learner on a course
 GET  /api/v1/progress/{learner_id}/recommendations      Adaptive learning recommendations
 """
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from api.dependencies import get_current_user, get_progress_tracker
+from api.models.users import UserRow
 from api.schemas import (
     LearnerProgressResponse,
     LessonRecordItem,
@@ -42,18 +44,35 @@ class _QuizAttemptRequest(BaseModel):
 router = APIRouter(prefix="/api/v1/progress", tags=["Learner Progress"])
 
 
+@router.get("/me/enrolled-courses")
+def get_enrolled_courses(current_user: UserRow = Depends(get_current_user)):
+    """Return course IDs where the authenticated learner has at least one lesson record."""
+    from api.db import SessionLocal
+    from api.models.progress import LessonRecordRow
+
+    with SessionLocal() as db:
+        rows = (
+            db.query(LessonRecordRow.course_id)
+            .filter(LessonRecordRow.learner_id == current_user.email)
+            .distinct()
+            .all()
+        )
+    return {"course_ids": [r.course_id for r in rows]}
+
+
 @router.post("/{learner_id}/course/{course_id}/lesson-start", status_code=204)
 def record_lesson_start(
     learner_id: str,
     course_id: str,
     body: _LessonStartRequest,
     progress_tracker=Depends(get_progress_tracker),
-    _=Depends(get_current_user),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """Record that a learner opened a lesson (creates the lesson_records row)."""
     if not progress_tracker:
         raise HTTPException(status_code=503, detail="Progress tracker not initialised.")
-    progress_tracker.record_lesson_start(learner_id, course_id, body.module_idx, body.lesson_idx)
+    effective_id = learner_id if current_user.role == "admin" else current_user.email
+    progress_tracker.record_lesson_start(effective_id, course_id, body.module_idx, body.lesson_idx)
 
 
 @router.post("/{learner_id}/course/{course_id}/lesson-complete", status_code=204)
@@ -62,7 +81,7 @@ def record_lesson_complete(
     course_id: str,
     body: _LessonCompleteRequest,
     progress_tracker=Depends(get_progress_tracker),
-    _=Depends(get_current_user),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """
     Mark a lesson as completed.  If `score` is present the lesson had a
@@ -72,13 +91,14 @@ def record_lesson_complete(
     """
     if not progress_tracker:
         raise HTTPException(status_code=503, detail="Progress tracker not initialised.")
+    effective_id = learner_id if current_user.role == "admin" else current_user.email
     if body.score is not None:
         progress_tracker.record_lesson_checkpoint(
-            learner_id, course_id, body.module_idx, body.lesson_idx, body.score
+            effective_id, course_id, body.module_idx, body.lesson_idx, body.score
         )
     else:
         progress_tracker.record_lesson_complete(
-            learner_id, course_id, body.module_idx, body.lesson_idx
+            effective_id, course_id, body.module_idx, body.lesson_idx
         )
 
 
@@ -88,7 +108,7 @@ def record_quiz_attempt(
     course_id: str,
     body: _QuizAttemptRequest,
     progress_tracker=Depends(get_progress_tracker),
-    _=Depends(get_current_user),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """
     Record a single KC answer.  Automatically updates the weak-topics table so
@@ -96,8 +116,9 @@ def record_quiz_attempt(
     """
     if not progress_tracker:
         raise HTTPException(status_code=503, detail="Progress tracker not initialised.")
+    effective_id = learner_id if current_user.role == "admin" else current_user.email
     progress_tracker.record_quiz_attempt(
-        learner_id=learner_id,
+        learner_id=effective_id,
         course_id=course_id,
         module_idx=body.module_idx,
         lesson_idx=body.lesson_idx,
@@ -116,7 +137,7 @@ def get_course_progress(
     learner_id:       str,
     course_id:        str,
     progress_tracker = Depends(get_progress_tracker),
-    _=Depends(get_current_user),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """
     Full progress summary for a learner on a given course.
@@ -128,11 +149,12 @@ def get_course_progress(
     if not progress_tracker:
         raise HTTPException(status_code=503, detail="Progress tracker is not initialised.")
 
-    prog = progress_tracker.get_course_progress(learner_id, course_id)
-    recs = progress_tracker.get_recommendations(learner_id, course_id)
+    effective_id = learner_id if current_user.role == "admin" else current_user.email
+    prog = progress_tracker.get_course_progress(effective_id, course_id)
+    recs = progress_tracker.get_recommendations(effective_id, course_id)
 
     return LearnerProgressResponse(
-        learner_id=learner_id,
+        learner_id=effective_id,
         course_id=course_id,
         completed_lessons=prog.completed_lesson_count,
         average_checkpoint_score=prog.average_checkpoint_score,
@@ -164,7 +186,7 @@ def get_recommendations(
     learner_id:       str,
     course_id:        str = Query(..., description="Course (source_file) to get recommendations for"),
     progress_tracker = Depends(get_progress_tracker),
-    _=Depends(get_current_user),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """
     Adaptive learning recommendations for a learner.
@@ -176,5 +198,6 @@ def get_recommendations(
     if not progress_tracker:
         raise HTTPException(status_code=503, detail="Progress tracker is not initialised.")
 
-    recs = progress_tracker.get_recommendations(learner_id, course_id)
+    effective_id = learner_id if current_user.role == "admin" else current_user.email
+    recs = progress_tracker.get_recommendations(effective_id, course_id)
     return [RecommendationItem(**r) for r in recs]

@@ -254,6 +254,20 @@ final notificationsProvider =
   (ref, recipientId) => NotificationService.list(recipientId),
 );
 
+// ── Enrolled course IDs for the current learner ──────────────────────────────
+// Calls GET /api/v1/learners/me/enrolled-courses — returns the set of course_ids
+// that have at least one lesson_record row. Falls back to empty set on error so
+// My Courses degrades gracefully when the endpoint is unavailable.
+final enrolledCourseIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/learners/me/enrolled-courses');
+    final ids = (resp.data['course_ids'] as List).cast<String>();
+    return ids.toSet();
+  } catch (_) {
+    return const <String>{};
+  }
+});
+
 // ── Adaptive recommendations for a course ────────────────────────────────────
 // Derived from weak_topics and lesson checkpoint scores. Returns an empty list
 // when the learner has no history yet (not an error state).

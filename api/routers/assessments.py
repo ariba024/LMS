@@ -8,14 +8,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from api.dependencies import get_current_user
+from api.models.users import UserRow
 
 router = APIRouter(prefix="/api/v1/assessments", tags=["Assessments"])
 
 
 @router.get("/history")
 def get_assessment_history(
-    learner_id: str = Query(..., description="Learner identifier"),
-    _=Depends(get_current_user),
+    learner_id: str | None = Query(None, description="Learner identifier (admin only; defaults to authenticated user)"),
+    current_user: UserRow = Depends(get_current_user),
 ):
     """
     Return all assessment attempts for a learner across all courses, newest first.
@@ -49,10 +50,12 @@ def get_assessment_history(
     from api.models.courses import CourseScriptRow
     from api.models.progress import AssessmentAttemptRow
 
+    effective_id = learner_id if (learner_id and current_user.role == "admin") else current_user.email
+
     with SessionLocal() as db:
         rows = (
             db.query(AssessmentAttemptRow)
-            .filter(AssessmentAttemptRow.learner_id == learner_id)
+            .filter(AssessmentAttemptRow.learner_id == effective_id)
             .order_by(desc(AssessmentAttemptRow.taken_at))
             .all()
         )

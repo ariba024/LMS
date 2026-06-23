@@ -357,12 +357,14 @@ def list_library(
 
 
 @router.get("/library/{script_id}", tags=["Course Library"])
-def get_library_script(script_id: str, _=Depends(get_current_user)):
+def get_library_script(script_id: str, current_user: UserRow = Depends(get_current_user)):
     """
     Retrieve a saved course script in full, including the complete course_script JSON.
     """
     record = library.get(script_id)
     if not record:
+        raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found in library.")
+    if not record.get("published") and current_user.role != "admin":
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found in library.")
     return record
 
@@ -491,7 +493,7 @@ async def get_assessment_questions(script_id: str, regenerate: bool = False, _=D
 
 @router.post("/library/{script_id}/assessment-attempts", tags=["Course Library"],
              status_code=201)
-async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest, _=Depends(get_current_user)):
+async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest, current_user: UserRow = Depends(get_current_user)):
     """
     Record a completed assessment attempt for a learner.
     Called by the Flutter app immediately after the learner submits the quiz.
@@ -505,10 +507,12 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
     if not record:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
 
+    effective_id = req.learner_id if current_user.role == "admin" else current_user.email
+
     with SessionLocal() as db:
         row = AssessmentAttemptRow(
             id=str(uuid.uuid4()),
-            learner_id=req.learner_id,
+            learner_id=effective_id,
             script_id=script_id,
             score=req.score,
             correct=req.correct,
@@ -526,7 +530,7 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
             from api.notification_store import push as _notif
             course_title = (record.get("course_title") or script_id)
             _notif(
-                req.learner_id,
+                effective_id,
                 "Certificate Earned",
                 f'You passed "{course_title}" with {req.score}%! Your certificate is ready.',
                 "🎓",
@@ -540,7 +544,7 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
 
 @router.get("/library/{script_id}/assessment-attempts", tags=["Course Library"],
             response_model=dict)
-def get_assessment_attempts(script_id: str, learner_id: str, _=Depends(get_current_user)):
+def get_assessment_attempts(script_id: str, learner_id: str | None = None, current_user: UserRow = Depends(get_current_user)):
     """
     Retrieve all assessment attempts for a learner on a course, newest first.
     """
@@ -552,12 +556,14 @@ def get_assessment_attempts(script_id: str, learner_id: str, _=Depends(get_curre
     if not record:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
 
+    effective_id = learner_id if (learner_id and current_user.role == "admin") else current_user.email
+
     with SessionLocal() as db:
         rows = (
             db.query(AssessmentAttemptRow)
             .filter(
                 AssessmentAttemptRow.script_id == script_id,
-                AssessmentAttemptRow.learner_id == learner_id,
+                AssessmentAttemptRow.learner_id == effective_id,
             )
             .order_by(desc(AssessmentAttemptRow.taken_at))
             .all()
