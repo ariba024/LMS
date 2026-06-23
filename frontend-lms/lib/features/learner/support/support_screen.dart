@@ -45,7 +45,8 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tickets = ref.watch(ticketsProvider);
+    final ticketsAsync = ref.watch(ticketsProvider);
+    final tickets = ticketsAsync.valueOrNull ?? [];
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     return SingleChildScrollView(
@@ -82,14 +83,41 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
   }
 }
 
-class _ContactForm extends StatefulWidget {
+class _ContactForm extends ConsumerStatefulWidget {
   @override
-  State<_ContactForm> createState() => _ContactFormState();
+  ConsumerState<_ContactForm> createState() => _ContactFormState();
 }
 
-class _ContactFormState extends State<_ContactForm> {
-  final _formKey = GlobalKey<FormState>();
-  bool _sent = false;
+class _ContactFormState extends ConsumerState<_ContactForm> {
+  final _formKey    = GlobalKey<FormState>();
+  final _subjectCtrl = TextEditingController();
+  final _descCtrl    = TextEditingController();
+  String _category   = 'Technical';
+  bool   _sent       = false;
+  bool   _loading    = false;
+
+  @override
+  void dispose() {
+    _subjectCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(ticketsProvider.notifier).createTicket(
+        subject:     _subjectCtrl.text.trim(),
+        category:    _category,
+        priority:    'Medium',
+        description: _descCtrl.text.trim(),
+      );
+      setState(() { _sent = true; _loading = false; });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +136,11 @@ class _ContactFormState extends State<_ContactForm> {
             ArrestoButton(
               label: 'Submit Another',
               variant: ArrestoButtonVariant.ghost,
-              onPressed: () => setState(() => _sent = false),
+              onPressed: () => setState(() {
+                _sent = false;
+                _subjectCtrl.clear();
+                _descCtrl.clear();
+              }),
             ),
           ],
         ),
@@ -123,52 +155,23 @@ class _ContactFormState extends State<_ContactForm> {
           children: [
             Text('Contact Admin', style: ArrestoText.h3()),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _field('Full Name', hintText: 'James Harrington')),
-                const SizedBox(width: 12),
-                Expanded(child: _field('Email', hintText: 'james@example.com')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _field('Subject', hintText: 'Brief description of your issue'),
+            _field('Subject', controller: _subjectCtrl,
+                hintText: 'Brief description of your issue',
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
             const SizedBox(height: 12),
             _dropdown(),
             const SizedBox(height: 12),
-            _field('Issue Description',
+            _field('Issue Description', controller: _descCtrl,
                 maxLines: 5,
-                hintText: 'Please describe your issue in detail...'),
-            const SizedBox(height: 12),
-            // Upload zone
-            Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: ArrestoColors.surfaceSoft,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: ArrestoColors.lineStrong,
-                    style: BorderStyle.solid),
-              ),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.upload_file_rounded,
-                        color: ArrestoColors.textMuted),
-                    const SizedBox(width: 8),
-                    Text('Drag & drop files or tap to upload',
-                        style: ArrestoText.small()),
-                  ],
-                ),
-              ),
-            ),
+                hintText: 'Please describe your issue in detail...',
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
             const SizedBox(height: 16),
             ArrestoButton(
-              label: 'Submit Ticket',
+              label: _loading ? 'Submitting...' : 'Submit Ticket',
               fullWidth: true,
               size: ArrestoButtonSize.lg,
               icon: const Icon(Icons.send_rounded),
-              onPressed: () => setState(() => _sent = true),
+              onPressed: _loading ? null : _submit,
             ),
           ],
         ),
@@ -176,14 +179,21 @@ class _ContactFormState extends State<_ContactForm> {
     );
   }
 
-  Widget _field(String label, {int maxLines = 1, String? hintText}) {
+  Widget _field(String label, {
+    required TextEditingController controller,
+    int maxLines = 1,
+    String? hintText,
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: ArrestoText.label()),
         const SizedBox(height: 5),
         TextFormField(
-          maxLines: maxLines,
+          controller: controller,
+          maxLines:   maxLines,
+          validator:  validator,
           decoration: InputDecoration(hintText: hintText),
         ),
       ],
@@ -198,12 +208,12 @@ class _ContactFormState extends State<_ContactForm> {
         Text('Category', style: ArrestoText.label()),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
-          value: cats.first,
+          value: _category,
           decoration: const InputDecoration(),
           items: cats
               .map((c) => DropdownMenuItem(value: c, child: Text(c)))
               .toList(),
-          onChanged: (_) {},
+          onChanged: (v) { if (v != null) setState(() => _category = v); },
         ),
       ],
     );

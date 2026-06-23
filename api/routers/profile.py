@@ -42,11 +42,16 @@ def _derive_name(learner_id: str) -> str:
 def _load_profile(learner_id: str) -> ProfileResponse:
     with SessionLocal() as db:
         prof = db.get(LearnerProfileRow, learner_id)
-        display_name = (
-            prof.display_name
-            if prof and prof.display_name
-            else _derive_name(learner_id)
-        )
+        if prof and prof.display_name:
+            display_name = prof.display_name
+        else:
+            # Fall back to the display_name set at registration (stored in users table)
+            from api.models.users import UserRow
+            user = db.query(UserRow).filter(UserRow.email == learner_id).first()
+            display_name = (
+                user.display_name if user and user.display_name
+                else _derive_name(learner_id)
+            )
         avatar_url = prof.avatar_url if prof else None
 
         records = (

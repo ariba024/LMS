@@ -20,6 +20,7 @@ from api.models.gamification import (
     HazardAttemptRow,
     LearnerXPRow,
 )
+from api.models.tickets import TicketRow, TicketReplyRow
 
 __all__ = [
     "UserRow",
@@ -39,4 +40,6 @@ __all__ = [
     "HazardSessionRow",
     "HazardAttemptRow",
     "LearnerXPRow",
+    "TicketRow",
+    "TicketReplyRow",
 ]

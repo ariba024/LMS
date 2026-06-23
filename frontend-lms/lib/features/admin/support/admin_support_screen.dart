@@ -23,14 +23,17 @@ class _AdminSupportScreenState extends ConsumerState<AdminSupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tickets = ref.watch(ticketsProvider);
+    final ticketsAsync = ref.watch(ticketsProvider);
+    final tickets  = ticketsAsync.valueOrNull ?? [];
     final filtered = _filter == 'All'
         ? tickets
         : tickets.where((t) => t.status == _filter).toList();
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
-      body: SingleChildScrollView(
+      body: ticketsAsync.isLoading && tickets.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,6 +116,7 @@ class _AdminSupportScreenState extends ConsumerState<AdminSupportScreen> {
     );
   }
 }
+
 
 class _TableHeader extends StatelessWidget {
   @override

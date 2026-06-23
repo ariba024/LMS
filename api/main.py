@@ -32,6 +32,7 @@ from api.routers import documents, chat, courses, tutor, progress, audio, voice,
 from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
 from api.routers import auth as auth_router
+from api.routers import tickets as tickets_router
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -239,6 +240,7 @@ app.include_router(notifications.router)
 app.include_router(attention.router)
 app.include_router(gamification.router)
 app.include_router(auth_router.router)
+app.include_router(tickets_router.router)
 
 
 # -- Global exception handler ---------------------------------------------------
