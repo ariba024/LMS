@@ -31,6 +31,7 @@ from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
 from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
+from api.routers import auth as auth_router
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -56,8 +57,25 @@ async def lifespan(app: FastAPI):
     logger.info("Initialising Arresto LMS API ...")
 
     # Database: create all SQLAlchemy-managed tables in lms.db
-    from api.db import init_db
+    from api.db import init_db, SessionLocal
     init_db()
+
+    # Seed a default admin account on first startup if none exists
+    from api.models.users import UserRow
+    from api import auth as _auth_utils
+    with SessionLocal() as _db:
+        if not _db.query(UserRow).filter(UserRow.role == "admin").first():
+            import uuid as _uuid
+            _admin = UserRow(
+                id=str(_uuid.uuid4()),
+                email="admin@arresto.in",
+                password_hash=_auth_utils.hash_password("Admin@123"),
+                role="admin",
+                display_name="Admin",
+            )
+            _db.add(_admin)
+            _db.commit()
+            logger.info("Default admin seeded — email: admin@arresto.in  password: Admin@123  (change immediately!)")
 
     vs = VectorStore(persist_dir=str(settings.chroma_db_dir))
     em = Embedder()
@@ -216,6 +234,7 @@ app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(attention.router)
 app.include_router(gamification.router)
+app.include_router(auth_router.router)
 
 
 # -- Global exception handler ---------------------------------------------------

@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     enable_reranking:          bool = True
     haiku_model:               str  = "claude-haiku-4-5-20251001"
 
+    # JWT authentication
+    jwt_secret_key:               str = "CHANGE_ME_USE_A_LONG_RANDOM_SECRET_IN_PRODUCTION"
+    jwt_algorithm:                str = "HS256"
+    access_token_expire_minutes:  int = 30   # 30 min access token
+    # refresh token TTL is 7 days (hardcoded in api/auth.py)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

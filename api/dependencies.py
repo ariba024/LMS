@@ -18,10 +18,57 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.config import settings
 from api.schemas import JobStatus, CourseJobStatus
+
+
+# ── Auth dependencies ─────────────────────────────────────────────────────────
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+):
+    """Extract and validate the Bearer JWT. Returns the UserRow on success."""
+    from jose import JWTError
+    from api.auth import decode_token
+    from api.db import SessionLocal
+    from api.models.users import UserRow
+
+    _401 = HTTPException(
+        status_code=401,
+        detail="Not authenticated.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if not credentials:
+        raise _401
+    try:
+        payload = decode_token(credentials.credentials)
+        if payload.get("type") != "access":
+            raise _401
+        user_id: str = payload.get("sub", "")
+        if not user_id:
+            raise _401
+    except JWTError:
+        raise _401
+
+    with SessionLocal() as db:
+        user = db.get(UserRow, user_id)
+
+    if user is None or not user.is_active:
+        raise _401
+    return user
+
+
+def require_admin(current_user=Depends(get_current_user)):
+    """Require the caller to be an admin. Raises 403 otherwise."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
 
 
 # Strings that signal the pasted content already has structured quiz items.

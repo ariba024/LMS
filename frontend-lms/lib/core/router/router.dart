@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../data/providers/app_state.dart';
+import '../../features/auth/login_screen.dart';
 import '../../features/shared/shell/learner_shell.dart';
 import '../../features/shared/shell/admin_shell.dart';
 import '../../features/learner/dashboard/learner_dashboard_screen.dart';
@@ -33,14 +35,56 @@ import '../../features/admin/video/video_management_screen.dart';
 import '../../features/learner/gamification/gamification_hub_screen.dart';
 import '../../features/learner/gamification/gamification_courses_screen.dart';
 
+// Notifies GoRouter to re-evaluate its redirect when auth state changes.
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier(ProviderRef ref) {
+    ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
+  final notifier = _AuthChangeNotifier(ref);
+
   return GoRouter(
-    initialLocation: '/learner',
+    refreshListenable: notifier,
+    initialLocation: '/login',
+    redirect: (context, state) {
+      final auth        = ref.read(authProvider);
+      final isLoading   = auth.isLoading;
+      final loggedIn    = auth.isAuthenticated;
+      final isAdmin     = auth.user?.isAdmin ?? false;
+      final loc         = state.matchedLocation;
+      final isLoginPage = loc == '/login';
+
+      if (isLoading) return null;  // still restoring session
+
+      if (!loggedIn && !isLoginPage) return '/login';
+
+      if (loggedIn && isLoginPage) {
+        return isAdmin ? '/admin' : '/learner';
+      }
+
+      // Prevent learners from reaching admin routes
+      if (loggedIn && !isAdmin && loc.startsWith('/admin')) {
+        return '/learner';
+      }
+
+      return null;
+    },
     routes: [
+      // ── Auth ────────────────────────────────────────────────────────────────
+      GoRoute(
+        path: '/login',
+        pageBuilder: (ctx, state) => _fade(state, const LoginScreen()),
+      ),
+
+      // ── Root redirect ────────────────────────────────────────────────────────
       GoRoute(
         path: '/',
         redirect: (_, __) => '/learner',
       ),
+
+      // ── Learner shell ────────────────────────────────────────────────────────
       ShellRoute(
         builder: (ctx, state, child) => LearnerShell(child: child),
         routes: [
@@ -150,6 +194,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+
+      // ── Admin shell ──────────────────────────────────────────────────────────
       ShellRoute(
         builder: (ctx, state, child) => AdminShell(child: child),
         routes: [

@@ -5,11 +5,16 @@ import '../models/lesson.dart';
 import '../models/question.dart';
 import '../models/ticket.dart';
 import '../../core/widgets/course_thumb.dart';
+import '../../core/providers/auth_provider.dart';
 
 // ─── Role ────────────────────────────────────────────────────────────────────
 enum UserRole { learner, admin }
 
-final roleProvider = StateProvider<UserRole>((ref) => UserRole.learner);
+/// Derived from the JWT role — no manual toggle needed after login.
+final roleProvider = Provider<UserRole>((ref) {
+  final user = ref.watch(authProvider).user;
+  return user?.isAdmin == true ? UserRole.admin : UserRole.learner;
+});
 
 // ─── Mock Courses ─────────────────────────────────────────────────────────────
 final mockCourses = [
