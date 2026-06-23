@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../../../core/services/admin_user_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
@@ -86,12 +88,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               children: [
                 _settingRow(Icons.person_rounded,        'My Profile'),
-                _settingRow(Icons.lock_rounded,          'Change Password'),
+                _settingRow(Icons.lock_rounded,          'Change Password',
+                    onTap: () => _showChangePasswordDialog(context)),
                 _settingRow(Icons.notifications_rounded, 'Notifications'),
                 _settingRow(Icons.bar_chart_rounded,     'My Statistics'),
                 const Divider(color: ArrestoColors.line),
                 _settingRow(Icons.logout_rounded, 'Logout',
-                    color: ArrestoColors.red),
+                    color: ArrestoColors.red,
+                    onTap: () => ref.read(authProvider.notifier).logout()),
               ],
             ),
           ),
@@ -162,18 +166,107 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _settingRow(IconData icon, String label, {Color? color}) {
+  Future<void> _showChangePasswordDialog(BuildContext context) async {
+    final currentCtrl = TextEditingController();
+    final newCtrl     = TextEditingController();
+    bool submitting   = false;
+    String? error;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: ArrestoColors.surface,
+          title: Text('Change Password', style: ArrestoText.h4()),
+          content: SizedBox(
+            width: 320,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: currentCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Current password'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: newCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: 'New password (min 8 chars)'),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: ArrestoText.bodySm(color: ArrestoColors.red)),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      if (currentCtrl.text.isEmpty || newCtrl.text.length < 8) {
+                        setS(() => error = 'New password must be at least 8 characters.');
+                        return;
+                      }
+                      setS(() { submitting = true; error = null; });
+                      try {
+                        await AdminUserService.changePassword(
+                            currentCtrl.text, newCtrl.text);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Password changed successfully.')));
+                        }
+                      } catch (e) {
+                        setS(() {
+                          submitting = false;
+                          error = 'Incorrect current password.';
+                        });
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                  backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink),
+              child: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: ArrestoColors.ink))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    currentCtrl.dispose();
+    newCtrl.dispose();
+  }
+
+  Widget _settingRow(IconData icon, String label,
+      {Color? color, VoidCallback? onTap}) {
     final c = color ?? ArrestoColors.textSecondary;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: c),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: ArrestoText.body(color: c))),
-          const Icon(Icons.chevron_right_rounded,
-              size: 18, color: ArrestoColors.textMuted2),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: c),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: ArrestoText.body(color: c))),
+            Icon(Icons.chevron_right_rounded,
+                size: 18,
+                color: onTap != null
+                    ? ArrestoColors.textMuted
+                    : ArrestoColors.textMuted2),
+          ],
+        ),
       ),
     );
   }

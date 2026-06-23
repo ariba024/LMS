@@ -141,3 +141,22 @@ def me(current_user: UserRow = Depends(get_current_user)):
         display_name=current_user.display_name,
         is_active=current_user.is_active,
     )
+
+
+class _ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:     str = Field(min_length=8)
+
+
+@router.post("/change-password", status_code=204)
+def change_password(
+    body: _ChangePasswordRequest,
+    current_user: UserRow = Depends(get_current_user),
+):
+    """Allow an authenticated user to change their own password."""
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    with SessionLocal() as db:
+        user = db.get(UserRow, current_user.id)
+        user.password_hash = hash_password(body.new_password)
+        db.commit()

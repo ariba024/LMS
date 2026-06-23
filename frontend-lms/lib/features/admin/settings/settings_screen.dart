@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/admin_user_service.dart';
 import '../../../core/services/document_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
@@ -164,12 +165,13 @@ class _SettingsContent extends StatelessWidget {
               style: ArrestoText.small()),
           const SizedBox(height: 24),
           if (section == 'Admin Profile') _ProfileSettings(),
+          if (section == 'User Management') const _UserManagementSettings(),
           if (section == 'AI Generation') _AISettings(),
           if (section == 'Knowledge Base') _KnowledgeBaseSettings(),
           if (section == 'Notifications') _NotificationSettings(),
           if (section == 'Branding') _BrandingSettings(),
           if (section == 'Delete Platform Data') _DangerZone(),
-          if (!['Admin Profile', 'AI Generation', 'Knowledge Base', 'Notifications', 'Branding', 'Delete Platform Data'].contains(section))
+          if (!['Admin Profile', 'User Management', 'AI Generation', 'Knowledge Base', 'Notifications', 'Branding', 'Delete Platform Data'].contains(section))
             ArrestoCard(
               child: Column(children: [
                 const Icon(Icons.construction_rounded,
@@ -726,6 +728,286 @@ class _DangerZone extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── User Management ───────────────────────────────────────────────────────────
+
+class _UserManagementSettings extends StatefulWidget {
+  const _UserManagementSettings();
+
+  @override
+  State<_UserManagementSettings> createState() => _UserManagementSettingsState();
+}
+
+class _UserManagementSettingsState extends State<_UserManagementSettings> {
+  late Future<List<AdminUser>> _usersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = AdminUserService.listUsers();
+  }
+
+  void _refresh() => setState(() => _usersFuture = AdminUserService.listUsers());
+
+  Future<void> _showAddUserDialog() async {
+    final emailCtrl = TextEditingController();
+    final passCtrl  = TextEditingController();
+    final nameCtrl  = TextEditingController();
+    String role = 'learner';
+    bool submitting = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: ArrestoColors.surface,
+          title: Text('Add User', style: ArrestoText.h4()),
+          content: SizedBox(
+            width: 360,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Display name (optional)')),
+              const SizedBox(height: 8),
+              TextField(controller: emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Email *'),
+                  keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 8),
+              TextField(controller: passCtrl,
+                  decoration: const InputDecoration(labelText: 'Password (min 8 chars) *'),
+                  obscureText: true),
+              const SizedBox(height: 12),
+              Row(children: [
+                Text('Role:', style: ArrestoText.label()),
+                const SizedBox(width: 12),
+                ChoiceChip(label: const Text('Learner'), selected: role == 'learner',
+                    onSelected: (_) => setS(() => role = 'learner')),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('Admin'), selected: role == 'admin',
+                    onSelected: (_) => setS(() => role = 'admin')),
+              ]),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: submitting ? null : () async {
+                if (emailCtrl.text.trim().isEmpty || passCtrl.text.isEmpty) return;
+                setS(() => submitting = true);
+                try {
+                  await AdminUserService.createUser(
+                    email: emailCtrl.text.trim(),
+                    password: passCtrl.text,
+                    role: role,
+                    displayName: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _refresh();
+                } catch (e) {
+                  setS(() => submitting = false);
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              style: FilledButton.styleFrom(backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink),
+              child: submitting
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: ArrestoColors.ink))
+                  : const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    emailCtrl.dispose(); passCtrl.dispose(); nameCtrl.dispose();
+  }
+
+  Future<void> _showResetPasswordDialog(AdminUser user) async {
+    final ctrl = TextEditingController();
+    bool submitting = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: ArrestoColors.surface,
+          title: Text('Reset Password', style: ArrestoText.h4()),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Set a new password for ${user.email}', style: ArrestoText.bodySm()),
+            const SizedBox(height: 12),
+            TextField(controller: ctrl, obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password (min 8 chars)')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: submitting ? null : () async {
+                if (ctrl.text.length < 8) return;
+                setS(() => submitting = true);
+                try {
+                  await AdminUserService.resetPassword(user.id, ctrl.text);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password reset successfully.')));
+                } catch (e) {
+                  setS(() => submitting = false);
+                }
+              },
+              style: FilledButton.styleFrom(backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink),
+              child: const Text('Reset'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: Text('All Users', style: ArrestoText.h4())),
+          IconButton(icon: const Icon(Icons.refresh_rounded, size: 18,
+              color: ArrestoColors.textMuted), onPressed: _refresh),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: _showAddUserDialog,
+            icon: const Icon(Icons.person_add_rounded, size: 16),
+            label: const Text('Add User'),
+            style: FilledButton.styleFrom(
+              backgroundColor: ArrestoColors.amber,
+              foregroundColor: ArrestoColors.ink,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        FutureBuilder<List<AdminUser>>(
+          future: _usersFuture,
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: Padding(padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(color: ArrestoColors.orange)));
+            }
+            if (snap.hasError) {
+              return ArrestoCard(child: Center(child: Column(children: [
+                const Icon(Icons.wifi_off_rounded, color: ArrestoColors.textMuted2, size: 32),
+                const SizedBox(height: 8),
+                Text('Could not load users', style: ArrestoText.body()),
+                TextButton(onPressed: _refresh, child: const Text('Retry')),
+              ])));
+            }
+            final users = snap.data ?? [];
+            if (users.isEmpty) {
+              return ArrestoCard(child: Center(child: Text('No users yet.',
+                  style: ArrestoText.body())));
+            }
+            return Column(
+              children: users.map((u) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: u.isActive ? ArrestoColors.surface : ArrestoColors.surfaceSoft,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: u.isActive
+                      ? ArrestoColors.cardBorder : ArrestoColors.lineStrong),
+                ),
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: u.isAdmin
+                        ? ArrestoColors.amberSoft : ArrestoColors.blueSoft,
+                    child: Text(u.name[0].toUpperCase(),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                            color: u.isAdmin ? ArrestoColors.amberStrong : ArrestoColors.blue)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(u.name, style: ArrestoText.bodyBold()),
+                    Text(u.email, style: ArrestoText.xs()),
+                  ])),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: u.isAdmin ? ArrestoColors.amberSoft : ArrestoColors.blueSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(u.isAdmin ? 'Admin' : 'Learner',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                            color: u.isAdmin ? ArrestoColors.amberStrong : ArrestoColors.blue)),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!u.isActive)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: ArrestoColors.redSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text('Inactive', style: ArrestoText.xs(color: ArrestoColors.red)
+                          .copyWith(fontWeight: FontWeight.w700)),
+                    ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert_rounded,
+                        size: 18, color: ArrestoColors.textMuted),
+                    onSelected: (action) async {
+                      switch (action) {
+                        case 'reset':
+                          await _showResetPasswordDialog(u);
+                        case 'toggle_role':
+                          try {
+                            await AdminUserService.updateUser(u.id,
+                                role: u.isAdmin ? 'learner' : 'admin');
+                            _refresh();
+                          } catch (_) {}
+                        case 'toggle_active':
+                          try {
+                            await AdminUserService.updateUser(u.id, isActive: !u.isActive);
+                            _refresh();
+                          } catch (e) {
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$e')));
+                          }
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'reset',
+                          child: Row(children: [
+                            Icon(Icons.lock_reset_rounded, size: 16), SizedBox(width: 8),
+                            Text('Reset password'),
+                          ])),
+                      PopupMenuItem(value: 'toggle_role',
+                          child: Row(children: [
+                            const Icon(Icons.swap_horiz_rounded, size: 16), const SizedBox(width: 8),
+                            Text(u.isAdmin ? 'Make Learner' : 'Make Admin'),
+                          ])),
+                      PopupMenuItem(value: 'toggle_active',
+                          child: Row(children: [
+                            Icon(u.isActive ? Icons.block_rounded : Icons.check_circle_rounded,
+                                size: 16, color: u.isActive ? ArrestoColors.red : ArrestoColors.green),
+                            const SizedBox(width: 8),
+                            Text(u.isActive ? 'Deactivate' : 'Reactivate',
+                                style: TextStyle(color: u.isActive
+                                    ? ArrestoColors.red : ArrestoColors.green)),
+                          ])),
+                    ],
+                  ),
+                ]),
+              )).toList(),
+            );
+          },
+        ),
+      ],
     );
   }
 }
