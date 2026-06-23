@@ -254,6 +254,19 @@ final notificationsProvider =
   (ref, recipientId) => NotificationService.list(recipientId),
 );
 
+// ── Course progress summary for current learner ──────────────────────────────
+// Maps course_id → percent complete (0–100).
+// Calls GET /api/v1/progress/me/summary — falls back to empty map on error.
+final courseProgressSummaryProvider = FutureProvider.autoDispose<Map<String, int>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/progress/me/summary');
+    final data = resp.data as Map<String, dynamic>;
+    return data.map((k, v) => MapEntry(k, (v['percent'] as num).toInt()));
+  } catch (_) {
+    return const <String, int>{};
+  }
+});
+
 // ── Enrolled course IDs for the current learner ──────────────────────────────
 // Calls GET /api/v1/learners/me/enrolled-courses — returns the set of course_ids
 // that have at least one lesson_record row. Falls back to empty set on error so

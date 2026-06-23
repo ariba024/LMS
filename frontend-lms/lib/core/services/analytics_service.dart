@@ -19,6 +19,7 @@ class AnalyticsOverview {
   final int activeLearners;
   final List<MonthlyActivity> learnerActivity;
   final Map<String, int> styleDistribution;
+  final List<int> generationByMonth;
 
   const AnalyticsOverview({
     required this.totalCourses,
@@ -27,6 +28,7 @@ class AnalyticsOverview {
     required this.activeLearners,
     required this.learnerActivity,
     required this.styleDistribution,
+    this.generationByMonth = const [],
   });
 
   factory AnalyticsOverview.fromJson(Map<String, dynamic> j) =>
@@ -40,6 +42,9 @@ class AnalyticsOverview {
             .toList(),
         styleDistribution: (j['style_distribution'] as Map<String, dynamic>)
             .map((k, v) => MapEntry(k, (v as num).toInt())),
+        generationByMonth: (j['generation_by_month'] as List?)
+            ?.map((e) => (e as num).toInt())
+            .toList() ?? const [],
       );
 }
 

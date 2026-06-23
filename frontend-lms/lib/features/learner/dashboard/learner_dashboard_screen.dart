@@ -21,8 +21,15 @@ class LearnerDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use live library; fall back to empty list while loading so UI still builds
-    final courses = ref.watch(libraryProvider).valueOrNull ?? [];
+    final allCourses = ref.watch(libraryProvider).valueOrNull ?? [];
+    final progressMap = ref.watch(courseProgressSummaryProvider).valueOrNull ?? {};
+
+    // Merge backend progress percentages into course objects
+    final courses = allCourses.map((c) {
+      final pct = progressMap[c.id] ?? 0;
+      return pct > 0 ? c.copyWith(progress: pct) : c;
+    }).toList();
+
     final enrolledCourses =
         courses.where((c) => c.progress > 0 && c.progress < 100).toList();
     final isWide = MediaQuery.of(context).size.width >= 1024;
@@ -57,9 +64,7 @@ class LearnerDashboardScreen extends ConsumerWidget {
                           children: [
                             _ContinueCourses(courses: enrolledCourses),
                             const SizedBox(height: ArrestoSpacing.xl),
-                            _RecommendedSection(courses: courses
-                                .where((c) => c.progress == 0)
-                                .toList()),
+                            _buildRecommended(courses),
                           ],
                         ),
                       ),
@@ -74,12 +79,28 @@ class LearnerDashboardScreen extends ConsumerWidget {
                     children: [
                       _ContinueCourses(courses: enrolledCourses),
                       const SizedBox(height: ArrestoSpacing.xl),
+                      _buildRecommended(courses),
+                      const SizedBox(height: ArrestoSpacing.xl),
                       _RightSidebar(courses: enrolledCourses),
                     ],
                   ),
           ],
         ),
       );
+  }
+
+  Widget _buildRecommended(List<Course> courses) {
+    final inProgress = courses
+        .where((c) => c.progress > 0 && c.progress < 100)
+        .toList()
+      ..sort((a, b) => a.progress.compareTo(b.progress));
+    final recommended = inProgress.isNotEmpty
+        ? inProgress.take(3).toList()
+        : courses.where((c) => c.progress == 0).take(5).toList();
+    return _RecommendedSection(
+      courses: recommended,
+      title: inProgress.isNotEmpty ? 'Continue Learning' : 'Recommended for you',
+    );
   }
 }
 
@@ -363,7 +384,8 @@ class _CourseCard extends StatelessWidget {
 
 class _RecommendedSection extends StatelessWidget {
   final List<Course> courses;
-  const _RecommendedSection({required this.courses});
+  final String title;
+  const _RecommendedSection({required this.courses, this.title = 'Recommended for you'});
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +394,7 @@ class _RecommendedSection extends StatelessWidget {
       children: [
         SectionHeader(
           icon: Icons.recommend_rounded,
-          title: 'Recommended for you',
+          title: title,
           subtitle: 'Based on your learning history',
         ),
         const SizedBox(height: 14),

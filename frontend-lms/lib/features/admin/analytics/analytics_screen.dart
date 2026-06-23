@@ -241,9 +241,27 @@ class _StyleBarChart extends StatelessWidget {
   }
 }
 
-class _GenerationLineChart extends StatelessWidget {
+class _GenerationLineChart extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final overview = ref.watch(analyticsOverviewProvider).valueOrNull;
+    final genData = overview?.generationByMonth ?? [];
+
+    final spots = genData.isEmpty
+        ? [const FlSpot(0, 0)]
+        : genData
+            .asMap()
+            .entries
+            .map((e) => FlSpot(e.key.toDouble(), e.value.toDouble()))
+            .toList();
+
+    final maxY = genData.isEmpty
+        ? 10.0
+        : (genData.reduce((a, b) => a > b ? a : b).toDouble() * 1.3)
+            .clamp(2.0, double.infinity);
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+
     return ArrestoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,9 +272,10 @@ class _GenerationLineChart extends StatelessWidget {
             height: 180,
             child: LineChart(
               LineChartData(
+                minY: 0,
+                maxY: maxY,
                 gridData: FlGridData(
                   show: true,
-                  horizontalInterval: 5,
                   getDrawingHorizontalLine: (v) =>
                       FlLine(color: ArrestoColors.line, strokeWidth: 1),
                   drawVerticalLine: false,
@@ -268,10 +287,9 @@ class _GenerationLineChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (v, _) {
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                        if (v.toInt() < months.length) {
-                          return Text(months[v.toInt()],
-                              style: ArrestoText.xs());
+                        final i = v.toInt();
+                        if (i < months.length) {
+                          return Text(months[i], style: ArrestoText.xs());
                         }
                         return const SizedBox.shrink();
                       },
@@ -292,14 +310,7 @@ class _GenerationLineChart extends StatelessWidget {
                 ),
                 lineBarsData: [
                   LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 8),
-                      FlSpot(1, 12),
-                      FlSpot(2, 10),
-                      FlSpot(3, 18),
-                      FlSpot(4, 22),
-                      FlSpot(5, 24),
-                    ],
+                    spots: spots,
                     isCurved: true,
                     color: ArrestoColors.amber,
                     barWidth: 2.5,
@@ -422,11 +433,11 @@ class _AITutorTab extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _kpi('3,420', 'Total Conversations'),
+              _kpi('—', 'Total Conversations'),
               const SizedBox(width: 12),
-              _kpi('4.8', 'Avg Rating'),
+              _kpi('—', 'Avg Rating'),
               const SizedBox(width: 12),
-              _kpi('92%', 'Resolution Rate'),
+              _kpi('—', 'Resolution Rate'),
             ],
           ),
         ],

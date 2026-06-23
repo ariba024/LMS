@@ -58,4 +58,24 @@ class Course {
     required this.code,
     this.modules = const [],
   });
+
+  Course copyWith({int? progress, int? lessons, int? mins}) {
+    return Course(
+      id: id,
+      title: title,
+      desc: desc,
+      cat: cat,
+      style: style,
+      status: status,
+      level: level,
+      lessons: lessons ?? this.lessons,
+      mins: mins ?? this.mins,
+      progress: progress ?? this.progress,
+      learners: learners,
+      rating: rating,
+      certified: certified,
+      code: code,
+      modules: modules,
+    );
+  }
 }

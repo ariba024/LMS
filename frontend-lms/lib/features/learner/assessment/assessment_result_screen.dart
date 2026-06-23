@@ -205,14 +205,7 @@ class AssessmentResultScreen extends ConsumerWidget {
                   ArrestoButton(
                     label: 'Download Certificate',
                     icon: const Icon(Icons.workspace_premium_rounded),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Certificate download coming soon — check the Certificates tab.'),
-                          duration: Duration(seconds: 3),
-                        ),
-                      );
-                    },
+                    onPressed: () => context.go('/learner/certificates'),
                   ),
                 ArrestoButton(
                   label: 'Back to Course',
