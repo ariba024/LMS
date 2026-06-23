@@ -18,10 +18,52 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.config import settings
+from api.db import get_db
 from api.schemas import JobStatus, CourseJobStatus
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db=Depends(get_db),
+):
+    from jose import JWTError
+    from api.auth import decode_token
+    from api.models.users import UserRow
+
+    _401 = HTTPException(
+        status_code=401,
+        detail="Not authenticated.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if not credentials:
+        raise _401
+    try:
+        payload = decode_token(credentials.credentials)
+        if payload.get("type") != "access":
+            raise _401
+        user_id: str = payload.get("sub", "")
+        if not user_id:
+            raise _401
+    except JWTError:
+        raise _401
+    user = db.get(UserRow, user_id)
+    if user is None or not user.is_active:
+        raise _401
+    return user
+
+
+def require_admin(current_user=Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
 
 
 # Strings that signal the pasted content already has structured quiz items.
@@ -112,12 +154,11 @@ class JobStore:
     def __init__(self) -> None:
         self._uploads: dict[str, _UploadJob] = {}
         self._courses: dict[str, _CourseJob] = {}
-        self._load()
 
     # -- Bootstrap --------------------------------------------------------------
 
-    def _load(self) -> None:
-        """Read all jobs from DB into the in-memory cache on startup."""
+    def load(self) -> None:
+        """Read all jobs from DB into the in-memory cache. Called from lifespan after init_db()."""
         try:
             from api.db import SessionLocal
             from api.models.jobs import UploadJobRow, CourseJobRow
@@ -268,13 +309,6 @@ def _sync_ingest(
     pipeline: Any,
     retrieval_pipeline: Any = None,
 ) -> None:
-    import sys, io as _io
-    _captured   = _io.StringIO()
-    _old_stdout = sys.stdout
-    _old_stderr = sys.stderr
-    sys.stdout  = _captured
-    sys.stderr  = _captured
-
     from modules.content_ingestion.models import Asset, AssetType
 
     EXTS: dict[str, AssetType] = {
@@ -326,7 +360,8 @@ def _sync_ingest(
                     "Advanced retrieval may return lower-quality results for this file."
                 )
                 job.error = warning
-                print(f"[bge_index] WARNING: {warning}")
+                import logging as _logging
+                _logging.getLogger("arresto.ingest").warning(warning)
 
     except Exception as exc:
         job.status = "failed"
@@ -334,15 +369,6 @@ def _sync_ingest(
     finally:
         job.finished_at = time.time()
         job_store._persist_upload(job)
-        sys.stdout = _old_stdout
-        sys.stderr = _old_stderr
-        _log = _captured.getvalue()
-        if _log:
-            try:
-                _old_stdout.write(_log.encode("utf-8", errors="replace").decode("utf-8"))
-                _old_stdout.flush()
-            except Exception:
-                pass
 
 
 async def ingest_in_background(
@@ -367,12 +393,6 @@ def _sync_generate_course(
     duration_range:     str = "60-90 minutes",
     user_instructions:  str | None = None,
 ) -> None:
-    import sys, io as _io
-    _captured   = _io.StringIO()
-    _old_stdout = sys.stdout
-    _old_stderr = sys.stderr
-    sys.stdout  = _captured
-    sys.stderr  = _captured
     from modules.content_ingestion.course_generator import CourseGenerator
     job.status = "processing"
     job_store._persist_course(job)
@@ -475,16 +495,6 @@ def _sync_generate_course(
         job.status = "failed"
         job.error  = str(exc)
         job_store._persist_course(job)
-    finally:
-        sys.stdout = _old_stdout
-        sys.stderr = _old_stderr
-        _log = _captured.getvalue()
-        if _log:
-            try:
-                _old_stdout.write(_log.encode("utf-8", errors="replace").decode("utf-8"))
-                _old_stdout.flush()
-            except Exception:
-                pass
 
 
 async def generate_course_in_background(

@@ -14,7 +14,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.config import settings
-from api.dependencies import get_retrieval_pipeline, get_embedder, get_vector_store
+from api.dependencies import get_current_user, get_retrieval_pipeline, get_embedder, get_vector_store
 from api.schemas import ChatRequest, ChatResponse, SourceInfo
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chat / RAG"])
@@ -365,6 +365,7 @@ async def chat(
     retrieval_pipeline=Depends(get_retrieval_pipeline),
     embedder=Depends(get_embedder),
     vector_store=Depends(get_vector_store),
+    _=Depends(get_current_user),
 ):
     """
     Ask a question about any document in the knowledge base.

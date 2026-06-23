@@ -96,6 +96,14 @@ class _LearnerSidebar extends ConsumerWidget {
                   location: location,
                 ),
                 const SizedBox(height: 8),
+                _sectionLabel('CHALLENGES'),
+                _NavItem(
+                  icon: Icons.emoji_events_rounded,
+                  label: 'Gamification',
+                  route: '/learner/gamification',
+                  location: location,
+                ),
+                const SizedBox(height: 8),
                 _sectionLabel('HELP'),
                 _NavItem(
                   icon: Icons.help_outline_rounded,

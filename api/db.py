@@ -78,95 +78,69 @@ def init_db() -> None:
     """
     import api.models  # noqa: F401 — registers all ORM models with Base
     Base.metadata.create_all(bind=engine)
-    _migrate_course_scripts()
-    _migrate_video_renders()
+    _run_migrations()
     db_type = "PostgreSQL" if _is_postgres else "SQLite"
     print(f"[db] {db_type} database initialised (all tables ready).")
 
 
-def _migrate_video_renders() -> None:
-    """Add new columns to video_renders if they don't exist yet."""
-    from sqlalchemy import text
+# ---------------------------------------------------------------------------
+# Schema migrations
+#
+# To add a new column: append a tuple to _ADDITIVE_COLS — no other file changes.
+# Format: (table, col_name, sql_type, default_sql, nullable)
+#
+# Each migration is idempotent: SQLite uses PRAGMA table_info to skip existing
+# columns; PostgreSQL uses ADD COLUMN IF NOT EXISTS.
+# ---------------------------------------------------------------------------
 
-    new_cols = [
-        ("scene_index", "INTEGER", "NULL", True),
-        ("voice",       "TEXT",    "''",   False),
-    ]
+_ADDITIVE_COLS: list[tuple[str, str, str, str, bool]] = [
+    # table               col_name                      sql_type   default_sql  nullable
+    ("course_scripts",    "language",                   "TEXT",    "'English'", False),
+    ("course_scripts",    "difficulty",                 "TEXT",    "''",        False),
+    ("course_scripts",    "published",                  "INTEGER", "false",     False),
+    ("course_scripts",    "assessment_num_questions",   "INTEGER", "5",         False),
+    ("course_scripts",    "assessment_pass_pct",        "INTEGER", "70",        False),
+    ("course_scripts",    "assessment_time_min",        "INTEGER", "30",        False),
+    ("course_scripts",    "assessment_retakes",         "INTEGER", "3",         False),
+    ("course_scripts",    "assessment_questions_json",  "TEXT",    "NULL",      True),
+    ("video_renders",     "scene_index",                "INTEGER", "NULL",      True),
+    ("video_renders",     "voice",                      "TEXT",    "''",        False),
+]
+
+
+def _run_migrations() -> None:
+    """Apply all pending additive column migrations."""
+    from sqlalchemy import text
 
     with engine.connect() as conn:
         if _is_postgres:
-            for col, typ, default, nullable in new_cols:
-                null_clause = "" if nullable else f" NOT NULL DEFAULT {default}"
-                try:
-                    conn.execute(text(
-                        f"ALTER TABLE video_renders ADD COLUMN IF NOT EXISTS "
-                        f"{col} {typ}{null_clause}"
-                    ))
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-        else:
-            result   = conn.execute(text("PRAGMA table_info(video_renders)"))
-            existing = {row[1] for row in result}
-            for col, typ, default, nullable in new_cols:
-                if col not in existing:
-                    if nullable:
-                        conn.execute(text(
-                            f"ALTER TABLE video_renders ADD COLUMN {col} {typ}"
-                        ))
-                    else:
-                        conn.execute(text(
-                            f"ALTER TABLE video_renders ADD COLUMN "
-                            f"{col} {typ} NOT NULL DEFAULT {default}"
-                        ))
-            conn.commit()
-
-
-def _migrate_course_scripts() -> None:
-    """
-    Add new columns to course_scripts if they don't exist yet.
-    SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check PRAGMA first.
-    PostgreSQL uses a DO block to guard the ALTER safely.
-    """
-    from sqlalchemy import text
-
-    # (col_name, sql_type, default_sql, nullable)
-    new_cols = [
-        ("language",                   "TEXT",    "'English'", False),
-        ("difficulty",                 "TEXT",    "''",        False),
-        ("published",                  "INTEGER", "false",     False),
-        ("assessment_num_questions",   "INTEGER", "5",         False),
-        ("assessment_pass_pct",        "INTEGER", "70",        False),
-        ("assessment_time_min",        "INTEGER", "30",        False),
-        ("assessment_retakes",         "INTEGER", "3",         False),
-        ("assessment_questions_json",  "TEXT",    "NULL",      True),
-    ]
-
-    with engine.connect() as conn:
-        if _is_postgres:
-            for col, typ, default, nullable in new_cols:
+            for table, col, typ, default, nullable in _ADDITIVE_COLS:
                 pg_type = "BOOLEAN" if typ == "INTEGER" and col == "published" else typ
                 null_clause = "" if nullable else f" NOT NULL DEFAULT {default}"
                 try:
                     conn.execute(text(
-                        f"ALTER TABLE course_scripts ADD COLUMN IF NOT EXISTS "
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
                         f"{col} {pg_type}{null_clause}"
                     ))
                     conn.commit()
                 except Exception:
                     conn.rollback()
         else:
-            result   = conn.execute(text("PRAGMA table_info(course_scripts)"))
-            existing = {row[1] for row in result}
-            for col, typ, default, nullable in new_cols:
-                if col not in existing:
+            # Cache PRAGMA results per table to avoid redundant round-trips
+            table_cols: dict[str, set[str]] = {}
+            for table, col, typ, default, nullable in _ADDITIVE_COLS:
+                if table not in table_cols:
+                    result = conn.execute(text(f"PRAGMA table_info({table})"))
+                    table_cols[table] = {row[1] for row in result}
+                if col not in table_cols[table]:
                     if nullable:
                         conn.execute(text(
-                            f"ALTER TABLE course_scripts ADD COLUMN {col} {typ}"
+                            f"ALTER TABLE {table} ADD COLUMN {col} {typ}"
                         ))
                     else:
                         conn.execute(text(
-                            f"ALTER TABLE course_scripts ADD COLUMN "
+                            f"ALTER TABLE {table} ADD COLUMN "
                             f"{col} {typ} NOT NULL DEFAULT {default}"
                         ))
+                    table_cols[table].add(col)
             conn.commit()

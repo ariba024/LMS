@@ -25,6 +25,7 @@ from api.dependencies import (
     get_pipeline, get_retrieval_pipeline, get_vector_store,
     _sync_ingest,
     job_store,
+    require_admin,
 )
 from api.schemas import (
     BatchFileResult, BatchUploadResponse,
@@ -76,6 +77,7 @@ async def upload_document(
     pipeline=Depends(get_pipeline),
     vector_store=Depends(get_vector_store),
     retrieval_pipeline=Depends(get_retrieval_pipeline),
+    _=Depends(require_admin),
 ):
     """
     Upload a PDF, DOCX, or PPTX file.
@@ -125,6 +127,7 @@ async def batch_upload_documents(
     pipeline=Depends(get_pipeline),
     vector_store=Depends(get_vector_store),
     retrieval_pipeline=Depends(get_retrieval_pipeline),
+    _=Depends(require_admin),
 ):
     """
     Upload and ingest multiple files (PDF, DOCX, PPTX) in one request.
@@ -197,7 +200,7 @@ async def batch_upload_documents(
 
 @router.get("/jobs/{job_id}", response_model=JobStatus,
             responses={404: {"model": ErrorDetail}})
-def get_upload_job(job_id: str):
+def get_upload_job(job_id: str, _=Depends(require_admin)):
     """Poll the status of an upload/ingestion job."""
     job = job_store.get_upload(job_id)
     if not job:
@@ -206,7 +209,7 @@ def get_upload_job(job_id: str):
 
 
 @router.get("", response_model=DocumentListResponse)
-def list_documents(vector_store=Depends(get_vector_store)):
+def list_documents(vector_store=Depends(get_vector_store), _=Depends(require_admin)):
     """Return all documents currently stored in the vector database."""
     sources = vector_store.list_sources()
     docs: list[DocumentInfo] = []
@@ -223,7 +226,7 @@ def list_documents(vector_store=Depends(get_vector_store)):
 
 @router.get("/{filename}/content", response_model=DocumentContentResponse,
             responses={404: {"model": ErrorDetail}})
-def get_document_content(filename: str, vector_store=Depends(get_vector_store)):
+def get_document_content(filename: str, vector_store=Depends(get_vector_store), _=Depends(require_admin)):
     """
     Return the full extracted text for a document, split into chunks.
 
@@ -275,7 +278,7 @@ def get_document_content(filename: str, vector_store=Depends(get_vector_store)):
 
 
 @router.get("/available")
-def list_available_files(vector_store=Depends(get_vector_store)):
+def list_available_files(vector_store=Depends(get_vector_store), _=Depends(require_admin)):
     """
     List every supported file in the uploads/ directory with its ingestion status.
 
@@ -302,6 +305,7 @@ async def ingest_existing_file(
     pipeline=Depends(get_pipeline),
     vector_store=Depends(get_vector_store),
     retrieval_pipeline=Depends(get_retrieval_pipeline),
+    _=Depends(require_admin),
 ):
     """
     Ingest a file that already exists in the uploads/ directory.
@@ -352,6 +356,7 @@ def delete_document(
     filename:           str,
     vector_store=Depends(get_vector_store),
     retrieval_pipeline=Depends(get_retrieval_pipeline),
+    _=Depends(require_admin),
 ):
     """Remove all chunks for a document from both vector stores (MiniLM + bge-m3)."""
     chunks = vector_store.get_all_by_source(filename)

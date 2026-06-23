@@ -27,24 +27,17 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     super.dispose();
   }
 
-  void _sendReply(String ticketId) {
-    if (_replyCtrl.text.trim().isEmpty) return;
-    ref.read(ticketsProvider.notifier).addReply(
-          ticketId,
-          Reply(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            author: 'Admin User',
-            body: _replyCtrl.text.trim(),
-            time: 'Just now',
-            isAdmin: true,
-          ),
-        );
+  Future<void> _sendReply(String ticketId) async {
+    final body = _replyCtrl.text.trim();
+    if (body.isEmpty) return;
     _replyCtrl.clear();
+    await ref.read(ticketsProvider.notifier).addReply(ticketId, body);
   }
 
   @override
   Widget build(BuildContext context) {
-    final tickets = ref.watch(ticketsProvider);
+    final tickets = ref.watch(ticketsProvider).valueOrNull ?? [];
+    if (tickets.isEmpty) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final ticket = tickets.firstWhere((t) => t.id == widget.id,
         orElse: () => tickets.first);
 
@@ -67,9 +60,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                 .toList(),
             onChanged: (s) {
               if (s != null) {
-                ref
-                    .read(ticketsProvider.notifier)
-                    .updateStatus(ticket.id, s);
+                ref.read(ticketsProvider.notifier).updateStatus(ticket.id, s);
               }
             },
           ),

@@ -6,7 +6,8 @@ GET /api/v1/assessments/history   All past assessment attempts for a learner
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/assessments", tags=["Assessments"])
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api/v1/assessments", tags=["Assessments"])
 @router.get("/history")
 def get_assessment_history(
     learner_id: str = Query(..., description="Learner identifier"),
+    _=Depends(get_current_user),
 ):
     """
     Return all assessment attempts for a learner across all courses, newest first.

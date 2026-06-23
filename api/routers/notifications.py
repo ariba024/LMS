@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc
+
+from api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["Notifications"])
 
@@ -42,6 +44,7 @@ def _row_to_dict(r) -> dict:
 @router.get("")
 def list_notifications(
     recipient_id: str = Query(..., description="Learner ID or 'admin'"),
+    _=Depends(get_current_user),
 ):
     """Return the 50 most recent notifications for this recipient, newest first."""
     from api.db import SessionLocal
@@ -64,6 +67,7 @@ def list_notifications(
 @router.patch("/read-all")
 def mark_all_read(
     recipient_id: str = Query(..., description="Learner ID or 'admin'"),
+    _=Depends(get_current_user),
 ):
     """Mark every unread notification for this recipient as read."""
     from api.db import SessionLocal
@@ -79,7 +83,7 @@ def mark_all_read(
 
 
 @router.patch("/{notif_id}/read")
-def mark_one_read(notif_id: str):
+def mark_one_read(notif_id: str, _=Depends(get_current_user)):
     """Mark a single notification as read."""
     from api.db import SessionLocal
     from api.models.notifications import NotificationRow

@@ -23,7 +23,10 @@ from api.dependencies import (
     get_vector_store,
     generate_course_in_background,
     job_store,
+    get_current_user,
+    require_admin,
 )
+from api.models.users import UserRow
 from api.schemas import (
     CourseGenerateRequest, CourseGenerateResponse, CourseJobStatus, ErrorDetail,
     AssessmentConfigRequest, PublishRequest,
@@ -221,6 +224,7 @@ async def generate_course(
     background_tasks: BackgroundTasks,
     vector_store=Depends(get_vector_store),
     embedder=Depends(get_embedder),
+    _=Depends(require_admin),
 ):
     """
     Generate a structured course script from a document already in the knowledge base.
@@ -259,6 +263,7 @@ async def generate_course_from_blueprint(
     background_tasks:   BackgroundTasks,
     vector_store=Depends(get_vector_store),
     embedder=Depends(get_embedder),
+    _=Depends(require_admin),
     source_file:        str  = Form(...,  description="Filename as stored in the knowledge base"),
     instructions:       str  = Form(...,  description="Full course blueprint — paste raw text, newlines and quotes are fine"),
     course_title:       str  = Form(None, description="Override course title (optional)"),
@@ -306,7 +311,7 @@ async def generate_course_from_blueprint(
 
 @router.get("/jobs/{job_id}", response_model=CourseJobStatus,
             responses={404: {"model": ErrorDetail}})
-def get_course_job(job_id: str):
+def get_course_job(job_id: str, _=Depends(require_admin)):
     """
     Poll the status of a course generation job.
 
@@ -323,18 +328,36 @@ def get_course_job(job_id: str):
 # -- Course Library -------------------------------------------------------------
 
 @router.get("/library", tags=["Course Library"])
-def list_library():
+def list_library(
+    q: str | None = None,
+    category: str | None = None,
+    current_user: UserRow = Depends(get_current_user),
+):
     """
     List all saved course scripts (index only — no script body).
-    Returns metadata: script_id, source_file, course_title, target_audience,
-    instructions, generated_at, total_lessons, estimated_duration_min.
+    Optional ?q= full-text search on title/audience.
+    Optional ?category= filter on target_audience (case-insensitive contains).
     """
-    scripts = library.list_all()
+    published_only = current_user.role != "admin"
+    scripts = library.list_all(published_only=published_only)
+    if q:
+        q_lower = q.strip().lower()
+        scripts = [
+            s for s in scripts
+            if q_lower in (s.get("course_title") or "").lower()
+            or q_lower in (s.get("target_audience") or "").lower()
+        ]
+    if category:
+        cat_lower = category.strip().lower()
+        scripts = [
+            s for s in scripts
+            if cat_lower in (s.get("target_audience") or "").lower()
+        ]
     return {"scripts": scripts, "total": len(scripts)}
 
 
 @router.get("/library/{script_id}", tags=["Course Library"])
-def get_library_script(script_id: str):
+def get_library_script(script_id: str, _=Depends(get_current_user)):
     """
     Retrieve a saved course script in full, including the complete course_script JSON.
     """
@@ -345,7 +368,7 @@ def get_library_script(script_id: str):
 
 
 @router.get("/library/{script_id}/download", tags=["Course Library"])
-def download_script(script_id: str):
+def download_script(script_id: str, _=Depends(get_current_user)):
     """Download the course_script body as a JSON file."""
     import json as _json
     from fastapi.responses import Response
@@ -366,6 +389,7 @@ def update_library_script(
     script_id:     str,
     course_script: dict       = Body(..., embed=True),
     course_title:  str | None = Body(None, embed=True),
+    _=Depends(require_admin),
 ):
     """
     Replace the `course_script` body of a saved course (e.g. after manual edits).
@@ -378,7 +402,7 @@ def update_library_script(
 
 
 @router.patch("/library/{script_id}/assessment-config", tags=["Course Library"])
-def save_assessment_config(script_id: str, req: AssessmentConfigRequest):
+def save_assessment_config(script_id: str, req: AssessmentConfigRequest, _=Depends(require_admin)):
     """
     Store the assessment configuration (questions, pass %, time, retakes) for a course.
     Called by the admin generator wizard after the learner configures the assessment step.
@@ -396,7 +420,7 @@ def save_assessment_config(script_id: str, req: AssessmentConfigRequest):
 
 
 @router.post("/library/{script_id}/publish", tags=["Course Library"])
-def publish_course(script_id: str, req: PublishRequest):
+def publish_course(script_id: str, req: PublishRequest, _=Depends(require_admin)):
     """
     Publish or unpublish a course. Sets the published flag so learners can access it.
     """
@@ -414,7 +438,7 @@ def publish_course(script_id: str, req: PublishRequest):
 
 
 @router.delete("/library/{script_id}", tags=["Course Library"])
-def delete_library_script(script_id: str):
+def delete_library_script(script_id: str, _=Depends(require_admin)):
     """Delete a saved course script from the library."""
     existed = library.delete(script_id)
     if not existed:
@@ -423,7 +447,7 @@ def delete_library_script(script_id: str):
 
 
 @router.get("/library/{script_id}/assessment-questions", tags=["Course Library"])
-async def get_assessment_questions(script_id: str, regenerate: bool = False):
+async def get_assessment_questions(script_id: str, regenerate: bool = False, _=Depends(get_current_user)):
     """
     Return assessment quiz questions for a course.
 
@@ -467,7 +491,7 @@ async def get_assessment_questions(script_id: str, regenerate: bool = False):
 
 @router.post("/library/{script_id}/assessment-attempts", tags=["Course Library"],
              status_code=201)
-async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest):
+async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest, _=Depends(get_current_user)):
     """
     Record a completed assessment attempt for a learner.
     Called by the Flutter app immediately after the learner submits the quiz.
@@ -516,7 +540,7 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest)
 
 @router.get("/library/{script_id}/assessment-attempts", tags=["Course Library"],
             response_model=dict)
-def get_assessment_attempts(script_id: str, learner_id: str):
+def get_assessment_attempts(script_id: str, learner_id: str, _=Depends(get_current_user)):
     """
     Retrieve all assessment attempts for a learner on a course, newest first.
     """

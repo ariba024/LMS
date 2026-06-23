@@ -42,3 +42,11 @@ edge-tts>=6.1.9
 # Attention detection — MediaPipe face mesh for learner focus monitoring
 # opencv-python-headless is already pulled in by easyocr; mediapipe is the only new dep
 mediapipe>=0.10.30
+
+# Authentication — JWT + bcrypt (use bcrypt directly; passlib 1.7.x is incompatible with bcrypt 5.x)
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
+email-validator>=2.0.0
+
+# Certificate PDF generation
+fpdf2>=2.7.0

@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
+import '../../core/services/ticket_service.dart';
 import '../models/course.dart';
 import '../models/learner.dart';
 import '../models/lesson.dart';
@@ -9,7 +11,10 @@ import '../../core/widgets/course_thumb.dart';
 // ─── Role ────────────────────────────────────────────────────────────────────
 enum UserRole { learner, admin }
 
-final roleProvider = StateProvider<UserRole>((ref) => UserRole.learner);
+final roleProvider = Provider<UserRole>((ref) {
+  final user = ref.watch(authProvider).user;
+  return user?.isAdmin == true ? UserRole.admin : UserRole.learner;
+});
 
 // ─── Mock Courses ─────────────────────────────────────────────────────────────
 final mockCourses = [
@@ -250,102 +255,44 @@ final mockQuestions = [
 
 final questionsProvider = Provider<List<Question>>((ref) => mockQuestions);
 
-// ─── Mock Tickets ─────────────────────────────────────────────────────────────
-final mockTickets = [
-  Ticket(
-    id: 'TK-1042',
-    subject: 'Cannot access certificate for WAH-181',
-    category: 'Certificates',
-    priority: 'High',
-    status: 'Open',
-    learnerName: 'James Harrington',
-    email: 'james.h@example.com',
-    date: '10 Jun 2026',
-    desc: 'I completed the Working at Heights Foundation course 3 days ago and passed the assessment with 88%, but my certificate is not showing up in the Certificates section. Can you please help?',
-    replies: [],
-  ),
-  Ticket(
-    id: 'TK-1041',
-    subject: 'Video playback freezing on Lesson 4',
-    category: 'Technical',
-    priority: 'Medium',
-    status: 'In Progress',
-    learnerName: 'Priya Nair',
-    email: 'priya.n@example.com',
-    date: '9 Jun 2026',
-    desc: 'The lesson video for Module 2, Lesson 4 freezes after the knowledge check. I have tried refreshing and using a different browser.',
-    replies: [
-      const Reply(
-        id: 'r1',
-        author: 'Support Team',
-        body: 'Hi Priya, thank you for reporting this. We are investigating the issue with the video player. We will update you within 24 hours.',
-        time: '9 Jun 2026, 14:30',
-        isAdmin: true,
-      ),
-    ],
-  ),
-  Ticket(
-    id: 'TK-1039',
-    subject: 'Assessment retake not available',
-    category: 'Assessments',
-    priority: 'Low',
-    status: 'Resolved',
-    learnerName: 'Sarah Mitchell',
-    email: 'sarah.m@example.com',
-    date: '7 Jun 2026',
-    desc: 'The retake button is greyed out even though I have attempts remaining according to the course settings.',
-    replies: [],
-  ),
-];
-
+// ─── Tickets (real API) ───────────────────────────────────────────────────────
 final ticketsProvider =
-    StateNotifierProvider<TicketsNotifier, List<Ticket>>((ref) {
-  return TicketsNotifier(mockTickets);
-});
+    AsyncNotifierProvider<TicketsNotifier, List<Ticket>>(TicketsNotifier.new);
 
-class TicketsNotifier extends StateNotifier<List<Ticket>> {
-  TicketsNotifier(super.initial);
+class TicketsNotifier extends AsyncNotifier<List<Ticket>> {
+  @override
+  Future<List<Ticket>> build() => TicketService.listTickets();
 
-  void updateStatus(String id, String newStatus) {
-    state = [
-      for (final t in state)
-        if (t.id == id)
-          Ticket(
-            id: t.id,
-            subject: t.subject,
-            category: t.category,
-            priority: t.priority,
-            status: newStatus,
-            learnerName: t.learnerName,
-            email: t.email,
-            date: t.date,
-            desc: t.desc,
-            replies: t.replies,
-          )
-        else
-          t
-    ];
+  Future<void> updateStatus(String id, String newStatus) async {
+    final updated = await TicketService.updateStatus(id, newStatus);
+    state = AsyncData([
+      for (final t in state.valueOrNull ?? [])
+        if (t.id == id) updated else t,
+    ]);
   }
 
-  void addReply(String ticketId, Reply reply) {
-    state = [
-      for (final t in state)
-        if (t.id == ticketId)
-          Ticket(
-            id: t.id,
-            subject: t.subject,
-            category: t.category,
-            priority: t.priority,
-            status: t.status,
-            learnerName: t.learnerName,
-            email: t.email,
-            date: t.date,
-            desc: t.desc,
-            replies: [...t.replies, reply],
-          )
-        else
-          t
-    ];
+  Future<void> addReply(String ticketId, String body) async {
+    final updated = await TicketService.addReply(ticketId, body);
+    state = AsyncData([
+      for (final t in state.valueOrNull ?? [])
+        if (t.id == ticketId) updated else t,
+    ]);
+  }
+
+  Future<Ticket> createTicket({
+    required String subject,
+    required String category,
+    required String priority,
+    required String description,
+  }) async {
+    final ticket = await TicketService.createTicket(
+      subject: subject,
+      category: category,
+      priority: priority,
+      description: description,
+    );
+    state = AsyncData([ticket, ...state.valueOrNull ?? []]);
+    return ticket;
   }
 }
 

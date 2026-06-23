@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/services/analytics_service.dart';
+import '../../core/services/api_client.dart';
 import '../../core/services/assessment_service.dart';
 import '../../core/services/course_service.dart';
 import '../../core/services/document_service.dart';
@@ -17,6 +19,26 @@ import '../models/notification_model.dart';
 final libraryProvider =
     FutureProvider.autoDispose<List<Course>>((ref) async {
   return CourseService.listLibrary();
+});
+
+// ── Course search (filtered library) ─────────────────────────────────────────
+// Family key: 'q|category' — pass empty string for no filter.
+final courseSearchProvider =
+    FutureProvider.autoDispose.family<List<Course>, ({String q, String category})>(
+  (ref, args) => CourseService.listLibrary(q: args.q, category: args.category),
+);
+
+// ── Gamification active courses ───────────────────────────────────────────────
+// Returns the set of course_ids that have at least one daily question or hazard session.
+final gamificationActiveCoursesProvider =
+    FutureProvider.autoDispose<Set<String>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/gamification/active-courses');
+    final ids = resp.data as List;
+    return ids.map((e) => e as String).toSet();
+  } catch (_) {
+    return const <String>{};
+  }
 });
 
 // ── Course detail (full script) ───────────────────────────────────────────────
@@ -104,8 +126,10 @@ final documentsNotifierProvider = AsyncNotifierProvider.autoDispose<
     DocumentsNotifier, List<DocumentInfo>>(DocumentsNotifier.new);
 
 // ── Learner identity ──────────────────────────────────────────────────────────
-// No auth yet — fixed learner ID. Replace with real auth when available.
-final learnerIdProvider = StateProvider<String>((ref) => 'ariba@arresto.in');
+final learnerIdProvider = Provider<String>((ref) {
+  final user = ref.watch(authProvider).user;
+  return user?.email ?? '';
+});
 
 // ── Active tutor sessions ─────────────────────────────────────────────────────
 // Maps courseId → sessionId. Survives navigation within the app session.

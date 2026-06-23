@@ -120,4 +120,26 @@ class ArrestoText {
         color: color ?? ArrestoColors.textSecondary,
         decoration: TextDecoration.none,
       );
+
+  // Aliases used by gamification screens
+  static TextStyle base({Color? color}) => GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: color ?? ArrestoColors.textSecondary,
+        decoration: TextDecoration.none,
+      );
+
+  static TextStyle lg({Color? color}) => GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        color: color ?? ArrestoColors.textSecondary,
+        decoration: TextDecoration.none,
+      );
+
+  static TextStyle xl({Color? color}) => GoogleFonts.inter(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: color ?? ArrestoColors.ink,
+        decoration: TextDecoration.none,
+      );
 }

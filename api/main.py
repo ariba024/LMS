@@ -29,8 +29,12 @@ from fastapi.responses import JSONResponse
 
 from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
-from api.routers import profile, learners, analytics, notifications
+from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
+from api.routers import auth as auth_router
+from api.routers import tickets as tickets_router
+from api.routers import admin_users as admin_users_router
+from api.routers import certificates as certs_router
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -58,6 +62,31 @@ async def lifespan(app: FastAPI):
     # Database: create all SQLAlchemy-managed tables in lms.db
     from api.db import init_db
     init_db()
+
+    # JobStore reads existing jobs from DB — must run after init_db()
+    from api.dependencies import job_store
+    job_store.load()
+
+    if settings.jwt_secret_key == "CHANGE_ME_USE_A_LONG_RANDOM_SECRET_IN_PRODUCTION":
+        logger.warning(
+            "JWT_SECRET_KEY is the default placeholder — tokens are NOT secure. "
+            "Set a real secret in .env before deploying to production."
+        )
+
+    # Seed default admin account (no-op if already exists)
+    from api.db import SessionLocal
+    from api.models.users import UserRow
+    from api.auth import hash_password as _hash
+    with SessionLocal() as _db:
+        if not _db.query(UserRow).filter(UserRow.email == "admin@arresto.in").first():
+            _db.add(UserRow(
+                email="admin@arresto.in",
+                password_hash=_hash("Admin@123"),
+                role="admin",
+                display_name="Admin",
+            ))
+            _db.commit()
+            logger.info("Seeded default admin: admin@arresto.in / Admin@123 — change immediately!")
 
     vs = VectorStore(persist_dir=str(settings.chroma_db_dir))
     em = Embedder()
@@ -215,6 +244,11 @@ app.include_router(learners.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(attention.router)
+app.include_router(gamification.router)
+app.include_router(auth_router.router)
+app.include_router(tickets_router.router)
+app.include_router(admin_users_router.router)
+app.include_router(certs_router.router)
 
 
 # -- Global exception handler ---------------------------------------------------

@@ -1,10 +1,15 @@
+import 'dart:html' as html;
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/services/api_client.dart';
+import '../../../core/services/assessment_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
 import '../../../core/widgets/section_header.dart';
-import '../../../core/services/assessment_service.dart';
 import '../../../data/providers/api_providers.dart';
 
 class CertificatesScreen extends ConsumerWidget {
@@ -37,15 +42,15 @@ class CertificatesScreen extends ConsumerWidget {
         data: (history) {
           // One certificate per unique course where the learner passed at least once.
           // Keep the best (highest score) passing attempt per course.
-          final Map<String, AssessmentHistoryItem> bestByCoure = {};
+          final Map<String, AssessmentHistoryItem> bestByCourse = {};
           for (final item in history) {
             if (!item.passed) continue;
-            final existing = bestByCoure[item.courseId];
+            final existing = bestByCourse[item.courseId];
             if (existing == null || item.score > existing.score) {
-              bestByCoure[item.courseId] = item;
+              bestByCourse[item.courseId] = item;
             }
           }
-          final certs = bestByCoure.values.toList()
+          final certs = bestByCourse.values.toList()
             ..sort((a, b) => b.takenAt.compareTo(a.takenAt));
 
           return SingleChildScrollView(
@@ -57,7 +62,8 @@ class CertificatesScreen extends ConsumerWidget {
                 SectionHeader(
                   icon: Icons.workspace_premium_rounded,
                   title: 'My Certificates',
-                  subtitle: '${certs.length} certificate${certs.length != 1 ? 's' : ''} earned',
+                  subtitle:
+                      '${certs.length} certificate${certs.length != 1 ? 's' : ''} earned',
                 ),
                 const SizedBox(height: 20),
                 if (certs.isEmpty)
@@ -99,13 +105,59 @@ class CertificatesScreen extends ConsumerWidget {
   }
 }
 
-class _CertificateCard extends StatelessWidget {
+class _CertificateCard extends StatefulWidget {
   final AssessmentHistoryItem item;
   const _CertificateCard({required this.item});
 
   @override
+  State<_CertificateCard> createState() => _CertificateCardState();
+}
+
+class _CertificateCardState extends State<_CertificateCard> {
+  bool _downloading = false;
+
+  Future<void> _downloadCert() async {
+    setState(() => _downloading = true);
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Generating certificate…'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      final resp = await apiClient.get(
+        '/api/v1/certificates/${widget.item.id}',
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      final bytes = resp.data as List<int>;
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'certificate_${widget.item.id.substring(0, 8).toUpperCase()}.pdf')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Certificate downloaded.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final certId = 'CERT-${item.id.substring(0, 8).toUpperCase()}';
+    final certId = 'CERT-${widget.item.id.substring(0, 8).toUpperCase()}';
 
     return Container(
       decoration: BoxDecoration(
@@ -157,7 +209,7 @@ class _CertificateCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: ArrestoColors.green),
                   ),
-                  child: Text('${item.score}% Pass',
+                  child: Text('${widget.item.score}% Pass',
                       style: ArrestoText.xs(color: ArrestoColors.green)
                           .copyWith(fontWeight: FontWeight.w700)),
                 ),
@@ -174,15 +226,15 @@ class _CertificateCard extends StatelessWidget {
                   .copyWith(letterSpacing: 2),
             ),
             const SizedBox(height: 8),
-            Text(item.courseTitle, style: ArrestoText.h2()),
+            Text(widget.item.courseTitle, style: ArrestoText.h2()),
             const SizedBox(height: 12),
             Row(
               children: [
-                _info('Issue Date', item.formattedDate),
+                _info('Issue Date', widget.item.formattedDate),
                 const SizedBox(width: 24),
                 _info('Certificate ID', certId),
                 const SizedBox(width: 24),
-                _info('Score', '${item.score}%'),
+                _info('Score', '${widget.item.score}%'),
               ],
             ),
             const SizedBox(height: 16),
@@ -193,16 +245,10 @@ class _CertificateCard extends StatelessWidget {
             Row(
               children: [
                 ArrestoButton(
-                  label: 'Download PDF',
+                  label: _downloading ? 'Downloading…' : 'Download PDF',
                   icon: const Icon(Icons.download_rounded),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Certificate download coming soon.'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
+                  loading: _downloading,
+                  onPressed: _downloading ? null : _downloadCert,
                 ),
                 const SizedBox(width: 10),
                 ArrestoButton(
@@ -211,9 +257,9 @@ class _CertificateCard extends StatelessWidget {
                   icon: const Icon(Icons.share_rounded),
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Share feature coming soon.'),
-                        duration: Duration(seconds: 2),
+                      SnackBar(
+                        content: Text('Certificate ID: $certId'),
+                        duration: const Duration(seconds: 3),
                       ),
                     );
                   },

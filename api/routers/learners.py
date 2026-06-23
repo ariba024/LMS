@@ -10,8 +10,9 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from api.dependencies import require_admin
 
 from api.db import SessionLocal
 from api.models.profile import LearnerProfileRow
@@ -110,7 +111,11 @@ def _summarise(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[LearnerSummary])
-def list_learners():
+def list_learners(
+    skip:  int = Query(0,   ge=0,  description="Number of learners to skip"),
+    limit: int = Query(100, ge=1, le=500, description="Max learners to return"),
+    _=Depends(require_admin),
+):
     """List every learner who has any activity in the DB, with summary stats."""
     with SessionLocal() as db:
         all_records  = db.query(LessonRecordRow).all()
@@ -131,11 +136,12 @@ def list_learners():
     ]
 
     # Active learners first, then alphabetical by name
-    return sorted(results, key=lambda l: (l.status != "Active", l.name))
+    sorted_results = sorted(results, key=lambda l: (l.status != "Active", l.name))
+    return sorted_results[skip : skip + limit]
 
 
 @router.get("/{learner_id}", response_model=LearnerSummary)
-def get_learner(learner_id: str):
+def get_learner(learner_id: str, _=Depends(require_admin)):
     """Get summary stats for one learner."""
     with SessionLocal() as db:
         records  = db.query(LessonRecordRow).filter(LessonRecordRow.learner_id == learner_id).all()

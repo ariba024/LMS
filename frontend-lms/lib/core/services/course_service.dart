@@ -6,8 +6,12 @@ import 'api_client.dart';
 class CourseService {
   // ── Library ────────────────────────────────────────────────────────────────
 
-  static Future<List<Course>> listLibrary() async {
-    final resp = await apiClient.get('/api/v1/courses/library');
+  static Future<List<Course>> listLibrary({String? q, String? category}) async {
+    final params = <String, dynamic>{};
+    if (q != null && q.isNotEmpty) params['q'] = q;
+    if (category != null && category.isNotEmpty) params['category'] = category;
+    final resp = await apiClient.get('/api/v1/courses/library',
+        queryParameters: params.isEmpty ? null : params);
     final scripts = resp.data['scripts'] as List;
     return scripts
         .map((s) => _courseFromApi(s as Map<String, dynamic>))

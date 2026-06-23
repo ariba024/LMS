@@ -8,7 +8,7 @@ GET  /api/v1/progress/{learner_id}/recommendations      Adaptive learning recomm
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from api.dependencies import get_progress_tracker
+from api.dependencies import get_current_user, get_progress_tracker
 from api.schemas import (
     LearnerProgressResponse,
     LessonRecordItem,
@@ -48,6 +48,7 @@ def record_lesson_start(
     course_id: str,
     body: _LessonStartRequest,
     progress_tracker=Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """Record that a learner opened a lesson (creates the lesson_records row)."""
     if not progress_tracker:
@@ -61,6 +62,7 @@ def record_lesson_complete(
     course_id: str,
     body: _LessonCompleteRequest,
     progress_tracker=Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """
     Mark a lesson as completed.  If `score` is present the lesson had a
@@ -86,6 +88,7 @@ def record_quiz_attempt(
     course_id: str,
     body: _QuizAttemptRequest,
     progress_tracker=Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """
     Record a single KC answer.  Automatically updates the weak-topics table so
@@ -113,6 +116,7 @@ def get_course_progress(
     learner_id:       str,
     course_id:        str,
     progress_tracker = Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """
     Full progress summary for a learner on a given course.
@@ -160,6 +164,7 @@ def get_recommendations(
     learner_id:       str,
     course_id:        str = Query(..., description="Course (source_file) to get recommendations for"),
     progress_tracker = Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """
     Adaptive learning recommendations for a learner.

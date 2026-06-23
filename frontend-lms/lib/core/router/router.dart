@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../data/providers/app_state.dart';
+import '../../features/auth/login_screen.dart';
 import '../../features/shared/shell/learner_shell.dart';
 import '../../features/shared/shell/admin_shell.dart';
 import '../../features/learner/dashboard/learner_dashboard_screen.dart';
@@ -30,11 +32,45 @@ import '../../features/admin/support/ticket_detail_screen.dart';
 import '../../features/admin/settings/settings_screen.dart';
 import '../../features/admin/courses/all_courses_screen.dart';
 import '../../features/admin/video/video_management_screen.dart';
+import '../../features/learner/gamification/gamification_hub_screen.dart';
+import '../../features/learner/gamification/gamification_courses_screen.dart';
+
+// Bridges Riverpod auth state changes to GoRouter's refreshListenable
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier(this._ref) {
+    _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
+  }
+  final Ref _ref;
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final notifier = _AuthChangeNotifier(ref);
+
   return GoRouter(
     initialLocation: '/learner',
+    refreshListenable: notifier,
+    redirect: (context, state) {
+      final auth      = ref.read(authProvider);
+      final isLoading = auth.isLoading;
+      final loggedIn  = auth.isAuthenticated;
+      final loc       = state.matchedLocation;
+      final isLogin   = loc == '/login';
+
+      if (isLoading) return null;
+      if (!loggedIn && !isLogin) return '/login';
+      if (loggedIn && isLogin) {
+        return auth.user!.isAdmin ? '/admin' : '/learner';
+      }
+      if (loggedIn && !auth.user!.isAdmin && loc.startsWith('/admin')) {
+        return '/learner';
+      }
+      return null;
+    },
     routes: [
+      GoRoute(
+        path: '/login',
+        pageBuilder: (ctx, state) => _fade(state, const LoginScreen()),
+      ),
       GoRoute(
         path: '/',
         redirect: (_, __) => '/learner',
@@ -129,6 +165,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/learner/ai',
             pageBuilder: (ctx, state) => _fade(state, const ArrestoAiScreen()),
+          ),
+          GoRoute(
+            path: '/learner/gamification',
+            pageBuilder: (ctx, state) =>
+                _fade(state, const GamificationCoursesScreen()),
+          ),
+          GoRoute(
+            path: '/learner/gamification/:courseId',
+            pageBuilder: (ctx, state) => _fade(
+              state,
+              GamificationHubScreen(
+                courseId: state.pathParameters['courseId']!,
+                courseTitle: state.uri.queryParameters['title'] ?? 'Course',
+                learnerId: ref.read(authProvider).user?.email ?? '',
+              ),
+            ),
           ),
         ],
       ),

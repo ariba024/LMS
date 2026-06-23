@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.config      import settings
 from api.course_library import library
-from api.dependencies import get_vector_store, get_embedder, get_retrieval_pipeline, get_progress_tracker, job_store
+from api.dependencies import get_vector_store, get_embedder, get_retrieval_pipeline, get_progress_tracker, get_current_user, job_store
 from api.schemas import (
     TutorSessionCreateRequest,  TutorSessionCreateResponse,
     TutorChatRequest,           TutorChatResponse,
@@ -98,6 +98,7 @@ def _lessons_in_module(session, module_idx: int) -> int:
 def create_session(
     request:          TutorSessionCreateRequest,
     progress_tracker = Depends(get_progress_tracker),
+    _=Depends(get_current_user),
 ):
     """
     Create a new tutor session from a completed course script.
@@ -178,6 +179,7 @@ def chat(
     embedder=           Depends(get_embedder),
     retrieval_pipeline= Depends(get_retrieval_pipeline),
     progress_tracker=   Depends(get_progress_tracker),
+    _=              Depends(get_current_user),
 ):
     """
     Send a message to the AI Tutor and receive a reply.
@@ -238,6 +240,7 @@ def generate_quiz(
     request:      TutorQuizRequest,
     vector_store= Depends(get_vector_store),
     embedder=     Depends(get_embedder),
+    _=        Depends(get_current_user),
 ):
     """
     Generate a manual practice quiz for the current lesson.
@@ -265,6 +268,7 @@ def complete_lesson(
     vector_store= Depends(get_vector_store),
     embedder=     Depends(get_embedder),
     progress_tracker= Depends(get_progress_tracker),
+    _=        Depends(get_current_user),
 ):
     """
     Mark the current lesson as studied and receive a checkpoint quiz.
@@ -312,6 +316,7 @@ def next_lesson(
     vector_store= Depends(get_vector_store),
     embedder=     Depends(get_embedder),
     progress_tracker= Depends(get_progress_tracker),
+    _=        Depends(get_current_user),
 ):
     """
     Advance to the next lesson.
@@ -409,6 +414,7 @@ def evaluate_answer(
     session_id:       str,
     request:          TutorAnswerRequest,
     progress_tracker= Depends(get_progress_tracker),
+    _=           Depends(get_current_user),
 ):
     """
     Submit a quiz answer for evaluation.
@@ -512,7 +518,7 @@ def evaluate_answer(
 
 
 @router.get("/session/{session_id}/history", response_model=TutorHistoryResponse)
-def get_history(session_id: str):
+def get_history(session_id: str, _=Depends(get_current_user)):
     """Retrieve the full conversation history for a session."""
     session = _require_session(session_id)
     return TutorHistoryResponse(

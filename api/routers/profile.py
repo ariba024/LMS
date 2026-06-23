@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.db import SessionLocal
+from api.dependencies import get_current_user
 from api.models.profile import LearnerProfileRow
 from api.models.progress import AssessmentAttemptRow, LessonRecordRow
 
@@ -41,11 +42,16 @@ def _derive_name(learner_id: str) -> str:
 def _load_profile(learner_id: str) -> ProfileResponse:
     with SessionLocal() as db:
         prof = db.get(LearnerProfileRow, learner_id)
-        display_name = (
-            prof.display_name
-            if prof and prof.display_name
-            else _derive_name(learner_id)
-        )
+        if prof and prof.display_name:
+            display_name = prof.display_name
+        else:
+            # Fall back to the display_name set at registration (stored in users table)
+            from api.models.users import UserRow
+            user = db.query(UserRow).filter(UserRow.email == learner_id).first()
+            display_name = (
+                user.display_name if user and user.display_name
+                else _derive_name(learner_id)
+            )
         avatar_url = prof.avatar_url if prof else None
 
         records = (
@@ -77,13 +83,13 @@ def _load_profile(learner_id: str) -> ProfileResponse:
 
 
 @router.get("/{learner_id}", response_model=ProfileResponse)
-def get_profile(learner_id: str):
+def get_profile(learner_id: str, _=Depends(get_current_user)):
     """Get learner profile + summary stats (enrolled courses, completed lessons, certificates)."""
     return _load_profile(learner_id)
 
 
 @router.patch("/{learner_id}", response_model=ProfileResponse)
-def patch_profile(learner_id: str, body: PatchProfileRequest):
+def patch_profile(learner_id: str, body: PatchProfileRequest, _=Depends(get_current_user)):
     """Update the learner's display name."""
     with SessionLocal() as db:
         prof = db.get(LearnerProfileRow, learner_id)
