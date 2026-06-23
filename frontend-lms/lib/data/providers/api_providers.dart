@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/providers/auth_provider.dart';
 import '../../core/services/analytics_service.dart';
 import '../../core/services/assessment_service.dart';
 import '../../core/services/course_service.dart';
@@ -104,11 +103,9 @@ class DocumentsNotifier
 final documentsNotifierProvider = AsyncNotifierProvider.autoDispose<
     DocumentsNotifier, List<DocumentInfo>>(DocumentsNotifier.new);
 
-// ── Learner identity — derived from JWT after login ───────────────────────────
-final learnerIdProvider = Provider<String>((ref) {
-  final user = ref.watch(authProvider).user;
-  return user?.userId ?? '';
-});
+// ── Learner identity ──────────────────────────────────────────────────────────
+// No auth yet — fixed learner ID. Replace with real auth when available.
+final learnerIdProvider = StateProvider<String>((ref) => 'ariba@arresto.in');
 
 // ── Active tutor sessions ─────────────────────────────────────────────────────
 // Maps courseId → sessionId. Survives navigation within the app session.

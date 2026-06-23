@@ -5,7 +5,6 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/avatar.dart';
-import '../../../core/providers/auth_provider.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/providers/api_providers.dart';
 import '../notifications/notification_panel.dart';
@@ -174,14 +173,14 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
 
 // ── Profile dropdown ───────────────────────────────────────────────────────────
 
-class _ProfileDropdown extends ConsumerWidget {
+class _ProfileDropdown extends StatelessWidget {
   final VoidCallback onClose;
   final UserRole role;
   final String displayName;
   const _ProfileDropdown({required this.onClose, required this.role, required this.displayName});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Container(
       width: 240,
       decoration: BoxDecoration(
@@ -228,10 +227,9 @@ class _ProfileDropdown extends ConsumerWidget {
             context.go('/learner/support');
           }),
           const Divider(height: 1, color: ArrestoColors.line),
-          _item(context, Icons.logout_rounded, 'Sign Out', () async {
+          _item(context, Icons.logout_rounded, 'Sign Out', () {
             onClose();
-            await ref.read(authProvider.notifier).logout();
-            if (context.mounted) context.go('/login');
+            context.go('/learner');
           }, color: ArrestoColors.red),
           const SizedBox(height: 4),
         ],
@@ -329,6 +327,7 @@ class _RoleSwitcher extends ConsumerWidget {
     final active = current == val;
     return GestureDetector(
       onTap: () {
+        ref.read(roleProvider.notifier).state = val;
         ctx.go(val == UserRole.learner ? '/learner' : '/admin');
       },
       child: AnimatedContainer(

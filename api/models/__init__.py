@@ -5,7 +5,6 @@ Importing this package registers every ORM model with the shared Base so that
 init_db() → Base.metadata.create_all() picks them all up.
 """
 
-from api.models.users import UserRow
 from api.models.jobs import UploadJobRow, CourseJobRow
 from api.models.courses import CourseScriptRow
 from api.models.sessions import TutorSessionRow
@@ -22,7 +21,6 @@ from api.models.gamification import (
 )
 
 __all__ = [
-    "UserRow",
     "UploadJobRow",
     "CourseJobRow",
     "CourseScriptRow",
