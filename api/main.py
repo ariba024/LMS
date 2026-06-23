@@ -33,6 +33,8 @@ from api.routers import profile, learners, analytics, notifications, gamificatio
 from api.routers import attention
 from api.routers import auth as auth_router
 from api.routers import tickets as tickets_router
+from api.routers import admin_users as admin_users_router
+from api.routers import certificates as certs_router
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -60,6 +62,10 @@ async def lifespan(app: FastAPI):
     # Database: create all SQLAlchemy-managed tables in lms.db
     from api.db import init_db
     init_db()
+
+    # JobStore reads existing jobs from DB — must run after init_db()
+    from api.dependencies import job_store
+    job_store.load()
 
     if settings.jwt_secret_key == "CHANGE_ME_USE_A_LONG_RANDOM_SECRET_IN_PRODUCTION":
         logger.warning(
@@ -241,6 +247,8 @@ app.include_router(attention.router)
 app.include_router(gamification.router)
 app.include_router(auth_router.router)
 app.include_router(tickets_router.router)
+app.include_router(admin_users_router.router)
+app.include_router(certs_router.router)
 
 
 # -- Global exception handler ---------------------------------------------------

@@ -62,6 +62,8 @@ class ProgressStore:
     def _connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(self._path)
         con.row_factory = sqlite3.Row
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA foreign_keys=ON")
         return con
 
     def _init(self) -> None:
