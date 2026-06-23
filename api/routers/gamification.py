@@ -550,3 +550,22 @@ def get_gamification_profile(
         daily_q_streak=row.daily_q_streak,
         rank=rank,
     )
+
+
+# ── Active courses ─────────────────────────────────────────────────────────────
+
+@router.get("/active-courses", response_model=list[str])
+def get_active_courses(
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return sorted list of course_ids that have at least one daily question or hazard session."""
+    from sqlalchemy import union
+    dq_ids = db.query(DailyQuestionRow.course_id).distinct()
+    hz_ids = db.query(HazardSessionRow.course_id).distinct()
+    all_ids: set[str] = set()
+    for row in dq_ids:
+        all_ids.add(row[0])
+    for row in hz_ids:
+        all_ids.add(row[0])
+    return sorted(all_ids)

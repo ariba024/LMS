@@ -11,8 +11,11 @@ class GamificationCoursesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final coursesAsync = ref.watch(libraryProvider);
-    final learnerId    = ref.watch(learnerIdProvider);
+    final coursesAsync     = ref.watch(libraryProvider);
+    final activeAsync      = ref.watch(gamificationActiveCoursesProvider);
+    final learnerId        = ref.watch(learnerIdProvider);
+    // Fall back to empty set (show all) when endpoint errors
+    final activeIds        = activeAsync.valueOrNull ?? const <String>{};
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
@@ -86,17 +89,28 @@ class GamificationCoursesScreen extends ConsumerWidget {
                 ),
               ),
               data: (courses) {
-                if (courses.isEmpty) {
+                // Show only courses that have active gamification content.
+                // If activeIds is empty (endpoint returned nothing or errored),
+                // fall back to showing all published courses.
+                final filtered = activeIds.isEmpty
+                    ? courses
+                    : courses.where((c) => activeIds.contains(c.id)).toList();
+
+                if (filtered.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
-                      child: Text('No published courses yet.',
-                          style: ArrestoText.bodySm()),
+                      child: Text(
+                        activeIds.isEmpty
+                            ? 'No published courses yet.'
+                            : 'No gamification content available yet.',
+                        style: ArrestoText.bodySm(),
+                      ),
                     ),
                   );
                 }
                 return Column(
-                  children: courses
+                  children: filtered
                       .map((c) => _CourseCard(course: c, learnerId: learnerId))
                       .toList(),
                 );

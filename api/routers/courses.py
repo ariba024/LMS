@@ -328,14 +328,31 @@ def get_course_job(job_id: str, _=Depends(require_admin)):
 # -- Course Library -------------------------------------------------------------
 
 @router.get("/library", tags=["Course Library"])
-def list_library(current_user: UserRow = Depends(get_current_user)):
+def list_library(
+    q: str | None = None,
+    category: str | None = None,
+    current_user: UserRow = Depends(get_current_user),
+):
     """
     List all saved course scripts (index only — no script body).
-    Returns metadata: script_id, source_file, course_title, target_audience,
-    instructions, generated_at, total_lessons, estimated_duration_min.
+    Optional ?q= full-text search on title/audience.
+    Optional ?category= filter on target_audience (case-insensitive contains).
     """
     published_only = current_user.role != "admin"
     scripts = library.list_all(published_only=published_only)
+    if q:
+        q_lower = q.strip().lower()
+        scripts = [
+            s for s in scripts
+            if q_lower in (s.get("course_title") or "").lower()
+            or q_lower in (s.get("target_audience") or "").lower()
+        ]
+    if category:
+        cat_lower = category.strip().lower()
+        scripts = [
+            s for s in scripts
+            if cat_lower in (s.get("target_audience") or "").lower()
+        ]
     return {"scripts": scripts, "total": len(scripts)}
 
 
