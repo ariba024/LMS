@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
 from api.routers import profile, learners, analytics, notifications
+from api.routers import attention
 from api.schemas import HealthResponse
 
 # -- Logging setup --------------------------------------------------------------
@@ -159,15 +160,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Retrieval pipeline skipped — ANTHROPIC_API_KEY not set")
 
+    # Attention pipeline — optional, requires mediapipe + opencv
+    attention.init(app.state)
+
     claude_status = "enabled" if settings.anthropic_api_key else "disabled (set ANTHROPIC_API_KEY)"
-    rp_status = "enabled" if app.state.retrieval_pipeline else "disabled"
+    rp_status     = "enabled" if app.state.retrieval_pipeline else "disabled"
+    attn_status   = "enabled" if app.state.attention_pipeline else "disabled"
     logger.info(
-        "Ready — %d chunks in DB | Claude: %s | Retrieval pipeline: %s",
-        vs.count(), claude_status, rp_status,
+        "Ready — %d chunks in DB | Claude: %s | Retrieval pipeline: %s | Attention: %s",
+        vs.count(), claude_status, rp_status, attn_status,
     )
 
     yield  # <- server runs here
 
+    attention.shutdown(app.state)
     logger.info("Arresto LMS API shutting down.")
 
 
@@ -208,6 +214,7 @@ app.include_router(profile.router)
 app.include_router(learners.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
+app.include_router(attention.router)
 
 
 # -- Global exception handler ---------------------------------------------------

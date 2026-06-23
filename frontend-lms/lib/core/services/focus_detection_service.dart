@@ -11,7 +11,7 @@ enum FocusStatus { focused, warning, distracted, noFace, inactive }
 class FocusDetectionService {
   static const _wsUrl = String.fromEnvironment(
     'FOCUS_WS_URL',
-    defaultValue: 'ws://localhost:8001/ws/detect',
+    defaultValue: 'ws://localhost:8000/ws/detect',
   );
 
   html.VideoElement? _videoEl;

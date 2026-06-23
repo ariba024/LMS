@@ -1,6 +1,7 @@
 # Python virtualenvs
 .venv/
 .venv-1/
+attention_backend/.venv-attention/
 __pycache__/
 *.pyc
 *.pyo
@@ -12,6 +13,9 @@ lms.db
 *.db
 chroma_db/
 chroma_db_bge_comparison/
+
+# Attention model — large binary; baked in during Docker build via download_model.py
+attention_backend/face_landmarker.task
 
 # Uploaded files
 uploads/

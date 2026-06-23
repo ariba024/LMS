@@ -25,12 +25,15 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/arresto_lms
-      PROGRESS_DB_PATH: /tmp/lms.db
+      PROGRESS_DB_PATH: /data/progress.db
       UPLOAD_DIR: /data/uploads
       CHROMA_DB_DIR: /data/chroma_db
+      CHROMA_DB_DIR_BGE: /data/chroma_db_bge
     volumes:
       - uploads_data:/data/uploads
       - chroma_data:/data/chroma_db
+      - chroma_bge_data:/data/chroma_db_bge
+      - progress_data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,3 +42,5 @@ volumes:
   postgres_data:
   uploads_data:
   chroma_data:
+  chroma_bge_data:
+  progress_data:

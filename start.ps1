@@ -4,20 +4,25 @@ $root = $PSScriptRoot
 
 Write-Host ""
 Write-Host "Arresto LMS - Dev Start" -ForegroundColor Cyan
-Write-Host "Backend   http://localhost:$ApiPort" -ForegroundColor Green
-Write-Host "Frontend  http://localhost:$WebPort" -ForegroundColor Green
-Write-Host "API docs  http://localhost:$ApiPort/docs" -ForegroundColor Gray
+Write-Host "  Backend   http://localhost:$ApiPort" -ForegroundColor Green
+Write-Host "  API docs  http://localhost:$ApiPort/docs" -ForegroundColor Gray
+Write-Host "  Frontend  http://localhost:$WebPort" -ForegroundColor Green
+Write-Host "  Attention ws://localhost:$ApiPort/ws/detect" -ForegroundColor Green
 Write-Host ""
 
-# Backend API window
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root'; .venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port $ApiPort --reload" -WindowStyle Normal
+# ── 1. LMS backend (includes attention WebSocket on /ws/detect) ────────────────
+Start-Process powershell -ArgumentList "-NoExit", "-Command", `
+    "cd '$root'; .venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port $ApiPort --reload" `
+    -WindowStyle Normal
 
 Start-Sleep -Milliseconds 800
 
-# Flutter dev server window (hot-reload with 'r', full restart with 'R')
-# Default JS renderer (no --wasm flag) is required for video_player to be visible on web
-# (Skwasm/WASM renderer covers <video> elements with its canvas layer)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root\frontend-lms'; flutter run -d web-server --web-port $WebPort --web-hostname localhost" -WindowStyle Normal
+# ── 2. Flutter dev server ──────────────────────────────────────────────────────
+# Default JS renderer (no --wasm flag) is required for video_player to be
+# visible on web — Skwasm/WASM renderer covers <video> with its canvas layer.
+Start-Process powershell -ArgumentList "-NoExit", "-Command", `
+    "cd '$root\frontend-lms'; flutter run -d web-server --web-port $WebPort --web-hostname localhost" `
+    -WindowStyle Normal
 
 Write-Host "Two windows opened." -ForegroundColor Cyan
 Write-Host "Wait ~20s then open http://localhost:$WebPort" -ForegroundColor White

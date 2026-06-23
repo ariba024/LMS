@@ -38,3 +38,7 @@ easyocr>=1.7.0
 
 # Edge TTS (free text-to-speech fallback)
 edge-tts>=6.1.9
+
+# Attention detection — MediaPipe face mesh for learner focus monitoring
+# opencv-python-headless is already pulled in by easyocr; mediapipe is the only new dep
+mediapipe>=0.10.30

@@ -26,14 +26,19 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source
-COPY api/        ./api/
-COPY modules/    ./modules/
+COPY api/               ./api/
+COPY modules/           ./modules/
+COPY attention_backend/ ./attention_backend/
 
 # Copy pre-built Flutter web output (built outside Docker in CI)
 COPY frontend-lms/build/web/ ./frontend-lms/build/web/
 
+# Bake the MediaPipe face landmark model (~29 MB) into the image so cold
+# starts don't trigger a network download on every ECS task launch.
+RUN cd attention_backend && python download_model.py
+
 # Persistent data directories — mount EFS or a volume here in production
-RUN mkdir -p /data/uploads /data/chroma_db /tmp
+RUN mkdir -p /data/uploads /data/chroma_db /data/chroma_db_bge /tmp
 
 EXPOSE 8000
 

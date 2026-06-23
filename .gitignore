@@ -25,6 +25,10 @@ jobs.json
 video_renders.json
 tutor_sessions.json
 
+# Attention backend — model file (29 MB binary) and local venv
+attention_backend/face_landmarker.task
+attention_backend/.venv-attention/
+
 # Flutter — exclude non-web build artifacts and tooling dirs; keep build/web for serving
 LMSarresto1/lmsarresto/build/android/
 LMSarresto1/lmsarresto/build/ios/
