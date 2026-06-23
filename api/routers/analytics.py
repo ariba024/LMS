@@ -10,8 +10,9 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from api.dependencies import require_admin
 
 from api.db import SessionLocal
 from api.models.courses import CourseScriptRow
@@ -39,7 +40,7 @@ class OverviewResponse(BaseModel):
 
 
 @router.get("/overview", response_model=OverviewResponse)
-def get_overview():
+def get_overview(_=Depends(require_admin)):
     """
     Platform-wide stats: course + video counts, learner headcounts,
     monthly active learners (last 6 months), and video style distribution.

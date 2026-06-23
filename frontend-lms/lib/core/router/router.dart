@@ -178,7 +178,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               GamificationHubScreen(
                 courseId: state.pathParameters['courseId']!,
                 courseTitle: state.uri.queryParameters['title'] ?? 'Course',
-                learnerId: state.uri.queryParameters['learner'] ?? 'anonymous',
+                learnerId: ref.read(authProvider).user?.email ?? '',
               ),
             ),
           ),

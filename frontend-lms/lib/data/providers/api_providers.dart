@@ -107,7 +107,7 @@ final documentsNotifierProvider = AsyncNotifierProvider.autoDispose<
 // ── Learner identity ──────────────────────────────────────────────────────────
 final learnerIdProvider = Provider<String>((ref) {
   final user = ref.watch(authProvider).user;
-  return user?.userId ?? '';
+  return user?.email ?? '';
 });
 
 // ── Active tutor sessions ─────────────────────────────────────────────────────

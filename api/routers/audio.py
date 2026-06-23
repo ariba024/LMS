@@ -32,13 +32,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger("arresto.audio")
 
 from api.config import settings
 from api.course_library import library
+from api.dependencies import get_current_user, require_admin
 from api.schemas import (
     AudioGenerateResponse,
     AudioJobStatus,
@@ -251,6 +252,7 @@ async def stream_lesson_audio(
     module_num: int,
     lesson_num: int,
     request:    Request,
+    _=Depends(get_current_user),
 ):
     """
     Stream MP3 audio for a specific lesson.
@@ -307,7 +309,7 @@ async def stream_lesson_audio(
 
 
 @router.get("/jobs/{job_id}", response_model=AudioJobStatus)
-def get_audio_job(job_id: str):
+def get_audio_job(job_id: str, _=Depends(require_admin)):
     """Poll the status of a pre-warm job."""
     job = _audio_jobs.get(job_id)
     if not job:
@@ -319,7 +321,7 @@ def get_audio_job(job_id: str):
 
 
 @router.get("/{script_id}", response_model=AudioListResponse)
-def list_audio(script_id: str):
+def list_audio(script_id: str, _=Depends(get_current_user)):
     """
     List lessons that have a cached MP3 ready for this course.
 
@@ -357,6 +359,7 @@ async def prewarm_audio(
     script_id:        str,
     background_tasks: BackgroundTasks,
     request:          Request,
+    _=Depends(require_admin),
 ):
     """
     **Optional pre-warm**: synthesise MP3s for all lessons in a course upfront.

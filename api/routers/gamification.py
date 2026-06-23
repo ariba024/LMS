@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from api.config import settings
 from api.db import get_db
+from api.dependencies import get_current_user, require_admin
 from api.models.courses import CourseScriptRow
 from api.models.gamification import (
     DailyQuestionAttemptRow,
@@ -119,6 +120,7 @@ async def get_daily_question(
     course_id: str,
     learner_id: str = "anonymous",
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Get (or generate) today's question for a course."""
     today = _today()
@@ -206,6 +208,7 @@ def submit_daily_question(
     course_id: str,
     body: SubmitDailyQRequest,
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Submit an answer to today's daily question."""
     today = _today()
@@ -306,6 +309,7 @@ class HazardSessionOut(BaseModel):
 def get_hazard_sessions(
     course_id: str,
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Return active hazard sessions for a course. Returns empty list if none exist yet."""
     rows = (
@@ -336,6 +340,7 @@ def _session_row_to_out(row: HazardSessionRow) -> HazardSessionOut:
 async def generate_hazard_sessions(
     course_id: str,
     db: Session = Depends(get_db),
+    _=Depends(require_admin),
 ):
     """
     (Admin) Generate 3 new Spot-the-Hazard sessions for a course using AI.
@@ -414,6 +419,7 @@ class HazardAttemptResponse(BaseModel):
 def submit_hazard_attempt(
     body: HazardAttemptRequest,
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Submit a completed Spot-the-Hazard game result and award XP."""
     # XP formula: 60 base * (found/total) + 10 per quiz correct + speed bonus
@@ -463,6 +469,7 @@ def get_leaderboard(
     course_id: str,
     limit: int = 20,
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Return top learners for a course ranked by total XP."""
     rows = (
@@ -504,6 +511,7 @@ def get_gamification_profile(
     learner_id: str,
     course_id: str,
     db: Session = Depends(get_db),
+    _=Depends(get_current_user),
 ):
     """Return a learner's gamification stats for a course."""
     xp_id = f"{learner_id}:{course_id}"

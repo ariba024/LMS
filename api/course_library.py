@@ -104,13 +104,16 @@ class CourseLibrary:
         print(f"[course_library] Saved '{course_title}' ({total_lessons} lessons) -> lms.db")
         return entry
 
-    def list_all(self) -> list[dict]:
+    def list_all(self, published_only: bool = False) -> list[dict]:
         """Return all index entries (no script body), newest first."""
         from api.db import SessionLocal
         from api.models.courses import CourseScriptRow
         from sqlalchemy import desc
         with SessionLocal() as db:
-            rows = db.query(CourseScriptRow).order_by(desc(CourseScriptRow.generated_at)).all()
+            q = db.query(CourseScriptRow)
+            if published_only:
+                q = q.filter(CourseScriptRow.published == True)  # noqa: E712
+            rows = q.order_by(desc(CourseScriptRow.generated_at)).all()
             # Build plain dicts while the session is still open; reading row
             # attributes after the with-block exits raises DetachedInstanceError.
             entries = [self._row_to_index_entry(r) for r in rows]

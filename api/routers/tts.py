@@ -20,9 +20,11 @@ import asyncio
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+from api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/tts", tags=["TTS"])
 
@@ -52,7 +54,7 @@ class SpeakRequest(BaseModel):
 
 
 @router.post("/speak")
-async def speak(body: SpeakRequest, request: Request):
+async def speak(body: SpeakRequest, request: Request, _=Depends(get_current_user)):
     """
     Synthesise text via Sarvam TTS and return a one-time streaming URL.
 
@@ -82,7 +84,7 @@ async def speak(body: SpeakRequest, request: Request):
 
 
 @router.get("/audio/{audio_id}")
-def get_audio(audio_id: str):
+def get_audio(audio_id: str, _=Depends(get_current_user)):
     """Stream a previously synthesised MP3. Expires 5 minutes after generation."""
     entry = _store.get(audio_id)
     if entry is None:

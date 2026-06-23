@@ -10,8 +10,9 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from api.dependencies import require_admin
 
 from api.db import SessionLocal
 from api.models.profile import LearnerProfileRow
@@ -110,7 +111,7 @@ def _summarise(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[LearnerSummary])
-def list_learners():
+def list_learners(_=Depends(require_admin)):
     """List every learner who has any activity in the DB, with summary stats."""
     with SessionLocal() as db:
         all_records  = db.query(LessonRecordRow).all()
@@ -135,7 +136,7 @@ def list_learners():
 
 
 @router.get("/{learner_id}", response_model=LearnerSummary)
-def get_learner(learner_id: str):
+def get_learner(learner_id: str, _=Depends(require_admin)):
     """Get summary stats for one learner."""
     with SessionLocal() as db:
         records  = db.query(LessonRecordRow).filter(LessonRecordRow.learner_id == learner_id).all()

@@ -60,6 +60,12 @@ async def lifespan(app: FastAPI):
     from api.db import init_db
     init_db()
 
+    if settings.jwt_secret_key == "CHANGE_ME_USE_A_LONG_RANDOM_SECRET_IN_PRODUCTION":
+        logger.warning(
+            "JWT_SECRET_KEY is the default placeholder — tokens are NOT secure. "
+            "Set a real secret in .env before deploying to production."
+        )
+
     # Seed default admin account (no-op if already exists)
     from api.db import SessionLocal
     from api.models.users import UserRow

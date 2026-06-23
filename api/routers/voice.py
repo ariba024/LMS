@@ -34,6 +34,7 @@ from fastapi.responses import Response
 logger = logging.getLogger("arresto.voice")
 
 from api.dependencies import (
+    get_current_user,
     get_embedder,
     get_progress_tracker,
     get_retrieval_pipeline,
@@ -109,6 +110,7 @@ async def voice_rag_chat(
     vector_store=       Depends(get_vector_store),
     embedder=           Depends(get_embedder),
     retrieval_pipeline= Depends(get_retrieval_pipeline),
+    _=             Depends(get_current_user),
 ):
     """
     Full voice round-trip with the RAG knowledge base (Arresto AI companion).
@@ -209,6 +211,7 @@ async def voice_chat(
     embedder=           Depends(get_embedder),
     retrieval_pipeline= Depends(get_retrieval_pipeline),
     progress_tracker=   Depends(get_progress_tracker),
+    _=             Depends(get_current_user),
 ):
     """
     Full voice round-trip with the AI Tutor.
@@ -286,6 +289,7 @@ async def voice_chat(
 async def transcribe_only(
     request: Request,
     audio:   UploadFile = File(..., description="Audio file to transcribe"),
+    _=Depends(get_current_user),
 ):
     """
     Transcribe audio to text without sending it to the tutor.
@@ -313,7 +317,7 @@ async def transcribe_only(
 
 
 @router.get("/audio/{audio_id}")
-def get_voice_audio(audio_id: str):
+def get_voice_audio(audio_id: str, _=Depends(get_current_user)):
     """
     Stream a synthesized voice reply MP3.
 

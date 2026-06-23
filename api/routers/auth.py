@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from api.auth import (
     create_access_token,
@@ -35,7 +35,7 @@ class _LoginRequest(BaseModel):
 
 class _RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     display_name: Optional[str] = None
 
 
@@ -51,6 +51,14 @@ class _AuthResponse(BaseModel):
     email:         str
     role:          str
     display_name:  Optional[str]
+
+
+class _MeResponse(BaseModel):
+    user_id:      str
+    email:        str
+    role:         str
+    display_name: Optional[str]
+    is_active:    bool
 
 
 @router.post("/register", response_model=_AuthResponse, status_code=201)
@@ -124,13 +132,12 @@ def refresh(body: _RefreshRequest):
     )
 
 
-@router.get("/me", response_model=_AuthResponse)
+@router.get("/me", response_model=_MeResponse)
 def me(current_user: UserRow = Depends(get_current_user)):
-    return _AuthResponse(
-        access_token="",
-        refresh_token="",
+    return _MeResponse(
         user_id=current_user.id,
         email=current_user.email,
         role=current_user.role,
         display_name=current_user.display_name,
+        is_active=current_user.is_active,
     )

@@ -10,9 +10,10 @@ import asyncio
 import json
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.config import settings
+from api.dependencies import get_current_user
 from api.schemas import QuestionGenerationRequest, QuestionGenerationResponse, GeneratedQuestion
 
 router = APIRouter(prefix="/api/v1/questions", tags=["Questions"])
@@ -138,7 +139,7 @@ def _generate_questions(
 
 
 @router.post("/generate", response_model=QuestionGenerationResponse)
-async def generate_questions(request: QuestionGenerationRequest):
+async def generate_questions(request: QuestionGenerationRequest, _=Depends(get_current_user)):
     """
     Generate MCQ knowledge-check questions from a lesson's narration script.
 

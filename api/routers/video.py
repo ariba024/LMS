@@ -17,12 +17,13 @@ from pathlib import Path
 
 import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.config import settings
 from api.course_library import library
+from api.dependencies import get_current_user, require_admin
 from modules.video.job_store import video_job_store
 from modules.video.render_engine import (
     count_lesson_scenes,
@@ -142,6 +143,7 @@ def _job_to_status(job) -> VideoRenderStatus:
 async def render_video(
     request: VideoRenderRequest,
     background_tasks: BackgroundTasks,
+    _=Depends(require_admin),
 ):
     """
     Trigger an async video render for one lesson or slide item.
@@ -282,6 +284,7 @@ async def generate_all_videos(
     style: str = "modern",
     lang:  str = "en",
     voice: str = "",
+    _=Depends(require_admin),
 ):
     """
     Trigger video renders for every lesson in a course in one call.
@@ -406,7 +409,7 @@ async def generate_all_videos(
 
 
 @router.get("/renders/{render_id}", response_model=VideoRenderStatus)
-def get_render_status(render_id: str):
+def get_render_status(render_id: str, _=Depends(get_current_user)):
     """Poll the status of a video render job."""
     job = video_job_store.get(render_id)
     if not job:
@@ -415,7 +418,7 @@ def get_render_status(render_id: str):
 
 
 @router.get("/renders/{render_id}/stream")
-def stream_video(render_id: str, request: Request):
+def stream_video(render_id: str, request: Request, _=Depends(get_current_user)):
     """
     Stream the rendered MP4 for inline <video> playback.
     Supports HTTP Range requests (206 Partial Content) so the Flutter
@@ -484,7 +487,7 @@ def stream_video(render_id: str, request: Request):
 
 
 @router.get("/scripts/{script_id}/lessons/{lesson_ref}/stream")
-def stream_lesson_video(script_id: str, lesson_ref: str, request: Request):
+def stream_lesson_video(script_id: str, lesson_ref: str, request: Request, _=Depends(get_current_user)):
     """
     Concatenate all completed scene MP4s for a lesson and stream as one video.
     Scenes are sorted by scene_index; if only one scene exists it is streamed
@@ -585,7 +588,7 @@ def stream_lesson_video(script_id: str, lesson_ref: str, request: Request):
 
 
 @router.get("/renders/{render_id}/download")
-def download_video(render_id: str):
+def download_video(render_id: str, _=Depends(get_current_user)):
     """
     Download the rendered MP4 as a file attachment.
     """
@@ -611,7 +614,7 @@ def download_video(render_id: str):
 
 
 @router.get("/scripts/{script_id}/renders")
-def list_script_renders(script_id: str):
+def list_script_renders(script_id: str, _=Depends(get_current_user)):
     """List all render jobs for a course script."""
     jobs = video_job_store.list_for_script(script_id)
     return {
@@ -622,7 +625,7 @@ def list_script_renders(script_id: str):
 
 
 @router.get("/heygen-credits")
-def heygen_credits():
+def heygen_credits(_=Depends(require_admin)):
     """Return remaining HeyGen credits (null if not configured)."""
     from modules.video.generators.heygen_render import remaining_credits, is_configured
     if not is_configured():
@@ -632,7 +635,7 @@ def heygen_credits():
 
 
 @router.get("/languages")
-def list_languages():
+def list_languages(_=Depends(get_current_user)):
     """
     Return all supported languages with their TTS engine.
 

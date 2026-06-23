@@ -318,7 +318,7 @@ class _RoleSwitcher extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _pill('Learner', UserRole.learner, role, ref, context),
-          _pill('Admin', UserRole.admin, role, ref, context),
+          if (role == UserRole.admin) _pill('Admin', UserRole.admin, role, ref, context),
         ],
       ),
     );
