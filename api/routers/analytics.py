@@ -7,14 +7,14 @@ GET /api/v1/analytics/overview
 from __future__ import annotations
 
 import time
-from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from api.dependencies import require_admin
+from sqlalchemy import func, distinct
 
 from api.db import SessionLocal
+from api.dependencies import require_admin
 from api.models.courses import CourseScriptRow
 from api.models.progress import LessonRecordRow
 from api.models.renders import VideoRenderRow
@@ -34,48 +34,74 @@ class OverviewResponse(BaseModel):
     total_courses:      int
     total_videos:       int
     total_learners:     int
-    active_learners:    int          # active in the last 30 days
-    learner_activity:   list[MonthlyActivity]   # last 6 months
+    active_learners:    int
+    learner_activity:   list[MonthlyActivity]
     style_distribution: dict[str, int]
 
 
 @router.get("/overview", response_model=OverviewResponse)
 def get_overview(_=Depends(require_admin)):
     """
-    Platform-wide stats: course + video counts, learner headcounts,
-    monthly active learners (last 6 months), and video style distribution.
+    Platform-wide stats computed with SQL aggregations — no full table scans
+    into Python memory.
     """
+    thirty_ago = time.time() - 30 * 86400
+
     with SessionLocal() as db:
         total_courses = db.query(CourseScriptRow).count()
-        all_records   = db.query(LessonRecordRow).all()
-        all_renders   = db.query(VideoRenderRow).all()
 
-    total_videos  = sum(1 for r in all_renders if r.status == "completed")
-    learner_ids   = {r.learner_id for r in all_records}
-    total_learners = len(learner_ids)
+        total_videos = (
+            db.query(VideoRenderRow)
+            .filter(VideoRenderRow.status == "completed")
+            .count()
+        )
 
-    thirty_ago = time.time() - 30 * 86400
-    active_learners = len({r.learner_id for r in all_records if r.started_at >= thirty_ago})
+        total_learners = (
+            db.query(func.count(distinct(LessonRecordRow.learner_id)))
+            .scalar() or 0
+        )
 
-    # Monthly unique active learners for the past 6 months
-    now = datetime.now(tz=timezone.utc)
-    monthly: dict[str, set[str]] = defaultdict(set)
-    for r in all_records:
-        dt  = datetime.fromtimestamp(r.started_at, tz=timezone.utc)
-        key = _MONTHS[dt.month - 1]
-        monthly[key].add(r.learner_id)
+        active_learners = (
+            db.query(func.count(distinct(LessonRecordRow.learner_id)))
+            .filter(LessonRecordRow.started_at >= thirty_ago)
+            .scalar() or 0
+        )
 
-    activity: list[MonthlyActivity] = []
-    for i in range(5, -1, -1):
-        month_idx = (now.month - 1 - i) % 12
-        label = _MONTHS[month_idx]
-        activity.append(MonthlyActivity(month=label, count=len(monthly.get(label, set()))))
+        # Monthly unique active learners for the past 6 months.
+        # Month boundaries are computed in Python (avoids dialect-specific date
+        # functions), then 6 small indexed time-window queries are fired.
+        now = datetime.now(tz=timezone.utc)
+        activity: list[MonthlyActivity] = []
+        for i in range(5, -1, -1):
+            # First day of the target month (going back i months)
+            month_dt = (now.replace(day=1) - timedelta(days=30 * i)).replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            # First day of the following month
+            if month_dt.month == 12:
+                next_dt = month_dt.replace(year=month_dt.year + 1, month=1)
+            else:
+                next_dt = month_dt.replace(month=month_dt.month + 1)
 
-    # Style distribution (completed renders only)
-    style_dist: dict[str, int] = defaultdict(int)
-    for r in all_renders:
-        if r.status == "completed":
-            style_dist[r.style] += 1
+            cnt = (
+                db.query(func.count(distinct(LessonRecordRow.learner_id)))
+                .filter(
+                    LessonRecordRow.started_at >= month_dt.timestamp(),
+                    LessonRecordRow.started_at <  next_dt.timestamp(),
+                )
+                .scalar() or 0
+            )
+            activity.append(MonthlyActivity(
+                month=_MONTHS[month_dt.month - 1],
+                count=cnt,
+            ))
+
+        style_dist: dict[str, int] = dict(
+            db.query(VideoRenderRow.style, func.count(VideoRenderRow.render_id))
+            .filter(VideoRenderRow.status == "completed")
+            .group_by(VideoRenderRow.style)
+            .all()
+        )
 
     return OverviewResponse(
         total_courses=total_courses,
@@ -83,5 +109,5 @@ def get_overview(_=Depends(require_admin)):
         total_learners=total_learners,
         active_learners=active_learners,
         learner_activity=activity,
-        style_distribution=dict(style_dist),
+        style_distribution=style_dist,
     )

@@ -150,11 +150,12 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("TTS engine failed to init: %s", exc)
 
-    # Progress tracker — writes to lms.db (same file as ORM tables)
+    # Progress tracker — shares the ORM engine so there is only one connection pool to lms.db
+    from api.db import engine as _orm_engine
     from modules.progress.tracker import ProgressTracker
     from modules.progress.store   import ProgressStore
-    app.state.progress_tracker = ProgressTracker(store=ProgressStore(settings.progress_db_path))
-    logger.info("Progress tracker initialised (%s)", settings.progress_db_path)
+    app.state.progress_tracker = ProgressTracker(store=ProgressStore(engine=_orm_engine))
+    logger.info("Progress tracker initialised (shared ORM engine)")
 
     # Pre-warm OCR engine in the background so the first document upload
     # doesn't stall while EasyOCR downloads its language models (~150 MB).
