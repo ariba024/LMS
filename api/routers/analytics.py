@@ -31,12 +31,13 @@ class MonthlyActivity(BaseModel):
 
 
 class OverviewResponse(BaseModel):
-    total_courses:      int
-    total_videos:       int
-    total_learners:     int
-    active_learners:    int
-    learner_activity:   list[MonthlyActivity]
-    style_distribution: dict[str, int]
+    total_courses:        int
+    total_videos:         int
+    total_learners:       int
+    active_learners:      int
+    learner_activity:     list[MonthlyActivity]
+    generation_by_month:  list[MonthlyActivity]
+    style_distribution:   dict[str, int]
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -103,11 +104,37 @@ def get_overview(_=Depends(require_admin)):
             .all()
         )
 
+        # Monthly course generation counts for the same 6-month window.
+        # Uses CourseScriptRow.generated_at (unix timestamp), already indexed.
+        generation: list[MonthlyActivity] = []
+        for i in range(5, -1, -1):
+            month_dt = (now.replace(day=1) - timedelta(days=30 * i)).replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            if month_dt.month == 12:
+                next_dt = month_dt.replace(year=month_dt.year + 1, month=1)
+            else:
+                next_dt = month_dt.replace(month=month_dt.month + 1)
+
+            cnt = (
+                db.query(func.count(CourseScriptRow.script_id))
+                .filter(
+                    CourseScriptRow.generated_at >= month_dt.timestamp(),
+                    CourseScriptRow.generated_at <  next_dt.timestamp(),
+                )
+                .scalar() or 0
+            )
+            generation.append(MonthlyActivity(
+                month=_MONTHS[month_dt.month - 1],
+                count=cnt,
+            ))
+
     return OverviewResponse(
         total_courses=total_courses,
         total_videos=total_videos,
         total_learners=total_learners,
         active_learners=active_learners,
         learner_activity=activity,
+        generation_by_month=generation,
         style_distribution=style_dist,
     )

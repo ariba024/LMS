@@ -118,11 +118,11 @@ class DailyQuestionOut(BaseModel):
 @router.get("/daily-question/{course_id}", response_model=DailyQuestionOut)
 async def get_daily_question(
     course_id: str,
-    learner_id: str = "anonymous",
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Get (or generate) today's question for a course."""
+    learner_id = current_user.email
     today = _today()
     q_id = f"{course_id}:{today}"
 
@@ -208,12 +208,13 @@ def submit_daily_question(
     course_id: str,
     body: SubmitDailyQRequest,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Submit an answer to today's daily question."""
+    effective_id = body.learner_id if current_user.role == "admin" else current_user.email
     today = _today()
     q_id = f"{course_id}:{today}"
-    attempt_id = f"{body.learner_id}:{q_id}"
+    attempt_id = f"{effective_id}:{q_id}"
 
     row = db.query(DailyQuestionRow).filter(DailyQuestionRow.id == q_id).first()
     if not row:
@@ -230,7 +231,7 @@ def submit_daily_question(
 
     attempt = DailyQuestionAttemptRow(
         id=attempt_id,
-        learner_id=body.learner_id,
+        learner_id=effective_id,
         question_id=q_id,
         course_id=course_id,
         selected_index=body.selected_index,
@@ -240,18 +241,10 @@ def submit_daily_question(
     )
     db.add(attempt)
 
-    xp_row = _get_or_create_xp(body.learner_id, course_id, db)
+    xp_row = _get_or_create_xp(effective_id, course_id, db)
 
     # Update streak
     prev_date = xp_row.last_daily_q_date
-    yesterday = (
-        datetime.fromtimestamp(_now(), tz=timezone.utc)
-        .date()
-        .replace(day=datetime.fromtimestamp(_now(), tz=timezone.utc).date().day - 1)
-        .isoformat()
-        if _now() > 86400
-        else None
-    )
     if prev_date == today:
         pass  # Already counted today (shouldn't reach here due to 409 above)
     elif prev_date and (
@@ -419,9 +412,10 @@ class HazardAttemptResponse(BaseModel):
 def submit_hazard_attempt(
     body: HazardAttemptRequest,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Submit a completed Spot-the-Hazard game result and award XP."""
+    effective_id = body.learner_id if current_user.role == "admin" else current_user.email
     # XP formula: 60 base * (found/total) + 10 per quiz correct + speed bonus
     spot_xp = int(60 * body.hazards_found / max(body.total_hazards, 1))
     quiz_xp = body.quiz_correct * 10
@@ -430,7 +424,7 @@ def submit_hazard_attempt(
 
     attempt = HazardAttemptRow(
         id=str(uuid.uuid4()),
-        learner_id=body.learner_id,
+        learner_id=effective_id,
         session_id=body.session_id,
         course_id=body.course_id,
         hazards_found=body.hazards_found,
@@ -443,7 +437,7 @@ def submit_hazard_attempt(
     )
     db.add(attempt)
 
-    xp_row = _get_or_create_xp(body.learner_id, body.course_id, db)
+    xp_row = _get_or_create_xp(effective_id, body.course_id, db)
     xp_row.hazard_xp += xp
     xp_row.total_xp += xp
     xp_row.updated_at = _now()

@@ -60,6 +60,64 @@ def get_enrolled_courses(current_user: UserRow = Depends(get_current_user)):
     return {"course_ids": [r.course_id for r in rows]}
 
 
+@router.get("/me/summary")
+def get_progress_summary(current_user: UserRow = Depends(get_current_user)):
+    """
+    Per-course progress summary for the authenticated learner.
+
+    Returns a mapping of course_id → {completed_lessons, total_lessons, percent}.
+    Used by the Flutter app to populate course.progress on the learner dashboard.
+    """
+    import json as _json
+    from sqlalchemy import func
+    from api.db import SessionLocal
+    from api.models.progress import LessonRecordRow
+    from api.models.courses import CourseScriptRow
+
+    with SessionLocal() as db:
+        course_rows = (
+            db.query(LessonRecordRow.course_id)
+            .filter(LessonRecordRow.learner_id == current_user.email)
+            .distinct()
+            .all()
+        )
+        course_ids = [r.course_id for r in course_rows]
+
+        result: dict = {}
+        for course_id in course_ids:
+            completed = (
+                db.query(func.count(LessonRecordRow.lesson_idx))
+                .filter(
+                    LessonRecordRow.learner_id == current_user.email,
+                    LessonRecordRow.course_id == course_id,
+                    LessonRecordRow.completed_at.isnot(None),
+                )
+                .scalar() or 0
+            )
+            script_row = db.query(CourseScriptRow).filter(
+                CourseScriptRow.script_id == course_id
+            ).first()
+            if script_row:
+                total = script_row.total_lessons
+                if not total:
+                    try:
+                        script = _json.loads(script_row.course_script_json)
+                        total = sum(
+                            len(m.get("lessons", [])) for m in script.get("modules", [])
+                        )
+                    except Exception:
+                        total = 0
+            else:
+                total = 0
+            percent = round(completed * 100 / total) if total > 0 else 0
+            result[course_id] = {
+                "completed_lessons": completed,
+                "total_lessons": total,
+                "percent": percent,
+            }
+    return result
+
+
 @router.post("/{learner_id}/course/{course_id}/lesson-start", status_code=204)
 def record_lesson_start(
     learner_id: str,

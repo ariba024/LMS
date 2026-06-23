@@ -47,6 +47,14 @@ class CourseLibrary:
         """
         generated_at = time.time()
         duration_min = course_script.get("estimated_total_duration_min", 0)
+        if not duration_min:
+            word_count = 0
+            for _mod in course_script.get("modules", []):
+                for _les in _mod.get("lessons", []):
+                    word_count += len((_les.get("narration_script") or "").split())
+            for _item in course_script.get("items", []):
+                word_count += len((_item.get("narration") or _item.get("narration_script") or "").split())
+            duration_min = max(1, round(word_count / 150)) if word_count else 0
 
         if course_script.get("items"):
             total_lessons = sum(
@@ -250,6 +258,8 @@ class CourseLibrary:
             "assessment_pass_pct":         getattr(row, "assessment_pass_pct",      70),
             "assessment_time_min":         getattr(row, "assessment_time_min",      30),
             "assessment_retakes":          getattr(row, "assessment_retakes",        3),
+            "lesson_count":                row.total_lessons,
+            "est_minutes":                 row.estimated_duration_min,
         }
 
 
