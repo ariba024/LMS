@@ -12,6 +12,13 @@ from api.models.renders import VideoRenderRow
 from api.models.progress import LessonRecordRow, QuizAttemptRow, WeakTopicRow, AssessmentAttemptRow
 from api.models.profile import LearnerProfileRow
 from api.models.notifications import NotificationRow
+from api.models.gamification import (
+    DailyQuestionRow,
+    DailyQuestionAttemptRow,
+    HazardSessionRow,
+    HazardAttemptRow,
+    LearnerXPRow,
+)
 
 __all__ = [
     "UploadJobRow",
@@ -25,4 +32,9 @@ __all__ = [
     "AssessmentAttemptRow",
     "LearnerProfileRow",
     "NotificationRow",
+    "DailyQuestionRow",
+    "DailyQuestionAttemptRow",
+    "HazardSessionRow",
+    "HazardAttemptRow",
+    "LearnerXPRow",
 ]

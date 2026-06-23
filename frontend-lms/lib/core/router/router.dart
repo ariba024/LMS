@@ -30,6 +30,8 @@ import '../../features/admin/support/ticket_detail_screen.dart';
 import '../../features/admin/settings/settings_screen.dart';
 import '../../features/admin/courses/all_courses_screen.dart';
 import '../../features/admin/video/video_management_screen.dart';
+import '../../features/learner/gamification/gamification_hub_screen.dart';
+import '../../features/learner/gamification/gamification_courses_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -129,6 +131,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/learner/ai',
             pageBuilder: (ctx, state) => _fade(state, const ArrestoAiScreen()),
+          ),
+          GoRoute(
+            path: '/learner/gamification',
+            pageBuilder: (ctx, state) =>
+                _fade(state, const GamificationCoursesScreen()),
+          ),
+          GoRoute(
+            path: '/learner/gamification/:courseId',
+            pageBuilder: (ctx, state) => _fade(
+              state,
+              GamificationHubScreen(
+                courseId: state.pathParameters['courseId']!,
+                courseTitle: state.uri.queryParameters['title'] ?? 'Course',
+                learnerId: state.uri.queryParameters['learner'] ?? 'anonymous',
+              ),
+            ),
           ),
         ],
       ),

@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse
 
 from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
-from api.routers import profile, learners, analytics, notifications
+from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
 from api.schemas import HealthResponse
 
@@ -215,6 +215,7 @@ app.include_router(learners.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(attention.router)
+app.include_router(gamification.router)
 
 
 # -- Global exception handler ---------------------------------------------------
