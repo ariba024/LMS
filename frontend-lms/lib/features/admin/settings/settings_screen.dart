@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -357,6 +358,15 @@ class _BrandingSettings extends StatelessWidget {
 
 // ── Knowledge Base ────────────────────────────────────────────────────────────
 
+class _FileJob {
+  final String jobId;
+  final String filename;
+  String status; // processing | completed | failed
+  String? error;
+  int? chunksCreated;
+  _FileJob({required this.jobId, required this.filename, this.status = 'processing'});
+}
+
 class _KnowledgeBaseSettings extends ConsumerStatefulWidget {
   @override
   ConsumerState<_KnowledgeBaseSettings> createState() =>
@@ -365,9 +375,18 @@ class _KnowledgeBaseSettings extends ConsumerStatefulWidget {
 
 class _KnowledgeBaseSettingsState
     extends ConsumerState<_KnowledgeBaseSettings> {
-  bool _uploading = false;
-  String? _uploadError;
-  String? _uploadSuccess;
+  bool _picking = false;
+  String? _pickError;
+  List<_FileJob> _jobs = [];
+  Timer? _pollTimer;
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _anyProcessing => _jobs.any((j) => j.status == 'processing');
 
   void _pickAndUpload() {
     final input = html.FileUploadInputElement()
@@ -378,9 +397,9 @@ class _KnowledgeBaseSettingsState
       final files = input.files;
       if (files == null || files.isEmpty) return;
       setState(() {
-        _uploading = true;
-        _uploadError = null;
-        _uploadSuccess = null;
+        _picking = true;
+        _pickError = null;
+        _jobs = [];
       });
       try {
         final loaded = <({String name, List<int> bytes})>[];
@@ -394,17 +413,15 @@ class _KnowledgeBaseSettingsState
               : Uint8List.fromList(raw as List<int>);
           loaded.add((name: file.name, bytes: bytes));
         }
-        final results = await DocumentService.batchUploadDocuments(loaded);
+        final submitted = await DocumentService.startBatchUpload(loaded);
         if (!mounted) return;
-        final succeeded = results.where((r) => r['status'] == 'ok').length;
-        final failed = results.length - succeeded;
         setState(() {
-          _uploading = false;
-          _uploadSuccess = failed == 0
-              ? '$succeeded file${succeeded == 1 ? '' : 's'} uploaded successfully.'
-              : '$succeeded uploaded, $failed failed — check file formats.';
+          _picking = false;
+          _jobs = submitted
+              .map((s) => _FileJob(jobId: s.jobId, filename: s.filename))
+              .toList();
         });
-        ref.invalidate(documentsNotifierProvider);
+        if (_jobs.isNotEmpty) _startPolling();
       } catch (e) {
         if (!mounted) return;
         String msg = 'Upload failed';
@@ -412,16 +429,12 @@ class _KnowledgeBaseSettingsState
           final d = e.response?.data;
           if (d is Map && d['detail'] != null) {
             msg = 'Upload failed: ${d['detail']}';
-          } else if (e.response?.statusCode != null) {
-            msg = 'Upload failed: server error (${e.response!.statusCode})';
           } else if (e.type == DioExceptionType.receiveTimeout ||
               e.type == DioExceptionType.sendTimeout ||
               e.type == DioExceptionType.connectionTimeout) {
-            msg = 'Upload failed: request timed out — '
-                'the server may still be processing. Try again in a moment.';
+            msg = 'Upload timed out — server may still be processing. Refresh in a moment.';
           } else if (e.type == DioExceptionType.connectionError) {
-            msg = 'Upload failed: could not reach the server. '
-                'Check that the backend is running.';
+            msg = 'Upload failed: could not reach the server.';
           } else {
             msg = 'Upload failed: ${e.message ?? e.type.name}';
           }
@@ -429,9 +442,36 @@ class _KnowledgeBaseSettingsState
           msg = 'Upload failed: $e';
         }
         setState(() {
-          _uploading = false;
-          _uploadError = msg;
+          _picking = false;
+          _pickError = msg;
         });
+      }
+    });
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted) return;
+      bool anyLeft = false;
+      for (final job in _jobs) {
+        if (job.status == 'processing') {
+          anyLeft = true;
+          try {
+            final s = await DocumentService.getJobStatus(job.jobId);
+            if (mounted && s.isTerminal) {
+              setState(() {
+                job.status = s.status;
+                job.error = s.error;
+                job.chunksCreated = s.chunksCreated;
+              });
+            }
+          } catch (_) {}
+        }
+      }
+      if (!anyLeft) {
+        _pollTimer?.cancel();
+        ref.invalidate(documentsNotifierProvider);
       }
     });
   }
@@ -456,53 +496,49 @@ class _KnowledgeBaseSettingsState
               ),
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: _uploading ? null : _pickAndUpload,
+                onTap: (_picking || _anyProcessing) ? null : _pickAndUpload,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  height: 100,
+                  height: 90,
                   decoration: BoxDecoration(
                     color: ArrestoColors.surfaceSoft,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _uploading
+                      color: _picking
                           ? ArrestoColors.orange
                           : ArrestoColors.lineStrong,
                     ),
                   ),
                   child: Center(
-                    child: _uploading
+                    child: _picking
                         ? const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
-                                width: 24,
-                                height: 24,
+                                width: 22, height: 22,
                                 child: CircularProgressIndicator(
-                                    color: ArrestoColors.orange,
-                                    strokeWidth: 2.5),
+                                    color: ArrestoColors.orange, strokeWidth: 2.5),
                               ),
                               SizedBox(height: 8),
-                              Text('Uploading…'),
+                              Text('Sending files…'),
                             ],
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(Icons.cloud_upload_rounded,
-                                  size: 32,
-                                  color: ArrestoColors.textMuted2),
+                                  size: 30, color: ArrestoColors.textMuted2),
                               const SizedBox(height: 6),
-                              Text('Click to upload files',
-                                  style: ArrestoText.bodyMd()),
-                              Text(
-                                  'PDF, DOCX, PPTX, TXT, CSV',
-                                  style: ArrestoText.small()),
+                              Text('Click to upload files', style: ArrestoText.bodyMd()),
+                              Text('PDF, DOCX, PPTX, TXT, CSV', style: ArrestoText.small()),
                             ],
                           ),
                   ),
                 ),
               ),
-              if (_uploadError != null) ...[
+
+              // Error banner
+              if (_pickError != null) ...[
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -515,34 +551,16 @@ class _KnowledgeBaseSettingsState
                     const Icon(Icons.error_outline_rounded,
                         color: ArrestoColors.red, size: 16),
                     const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(_uploadError!,
-                            style: ArrestoText.small(
-                                color: ArrestoColors.red))),
+                    Expanded(child: Text(_pickError!,
+                        style: ArrestoText.small(color: ArrestoColors.red))),
                   ]),
                 ),
               ],
-              if (_uploadSuccess != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: ArrestoColors.greenSoft,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: ArrestoColors.green
-                            .withValues(alpha: 0.4)),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle_rounded,
-                        color: ArrestoColors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(_uploadSuccess!,
-                            style: ArrestoText.small(
-                                color: ArrestoColors.green))),
-                  ]),
-                ),
+
+              // Per-file progress rows
+              if (_jobs.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                ..._jobs.map((job) => _JobRow(job: job)),
               ],
             ],
           ),
@@ -555,9 +573,7 @@ class _KnowledgeBaseSettingsState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Expanded(
-                    child: Text('Indexed Documents',
-                        style: ArrestoText.h4())),
+                Expanded(child: Text('Indexed Documents', style: ArrestoText.h4())),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded,
                       color: ArrestoColors.textMuted),
@@ -571,8 +587,7 @@ class _KnowledgeBaseSettingsState
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
                   child: Center(
-                    child: CircularProgressIndicator(
-                        color: ArrestoColors.orange),
+                    child: CircularProgressIndicator(color: ArrestoColors.orange),
                   ),
                 ),
                 error: (e, _) => Padding(
@@ -585,9 +600,8 @@ class _KnowledgeBaseSettingsState
                         style: ArrestoText.small(),
                         textAlign: TextAlign.center),
                     TextButton(
-                      onPressed: () => ref
-                          .read(documentsNotifierProvider.notifier)
-                          .refresh(),
+                      onPressed: () =>
+                          ref.read(documentsNotifierProvider.notifier).refresh(),
                       child: const Text('Retry'),
                     ),
                   ]),
@@ -610,64 +624,49 @@ class _KnowledgeBaseSettingsState
                   return Column(
                     children: [
                       Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                             '${docs.length} document${docs.length == 1 ? '' : 's'} · '
                             '${docs.fold(0, (s, d) => s + d.chunkCount)} total chunks',
                             style: ArrestoText.small()),
                       ),
                       ...docs.map((doc) => Container(
-                            margin:
-                                const EdgeInsets.only(bottom: 8),
+                            margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: ArrestoColors.surfaceSoft,
-                              borderRadius:
-                                  BorderRadius.circular(10),
-                              border: Border.all(
-                                  color: ArrestoColors.line),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: ArrestoColors.line),
                             ),
                             child: Row(children: [
                               Container(
-                                padding:
-                                    const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: ArrestoColors.redSoft,
-                                  borderRadius:
-                                      BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text(
-                                  doc.ext,
-                                  style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: ArrestoColors.red),
-                                ),
+                                child: Text(doc.ext,
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: ArrestoColors.red)),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(doc.displayName,
-                                        style:
-                                            ArrestoText.bodyBold(),
-                                        overflow:
-                                            TextOverflow.ellipsis),
-                                    Text(
-                                        '${doc.chunkCount} chunks',
+                                        style: ArrestoText.bodyBold(),
+                                        overflow: TextOverflow.ellipsis),
+                                    Text('${doc.chunkCount} chunks',
                                         style: ArrestoText.xs()),
                                   ],
                                 ),
                               ),
-                              const Icon(
-                                  Icons.check_circle_rounded,
-                                  color: ArrestoColors.green,
-                                  size: 16),
+                              const Icon(Icons.check_circle_rounded,
+                                  color: ArrestoColors.green, size: 16),
                             ]),
                           )),
                     ],
@@ -678,6 +677,75 @@ class _KnowledgeBaseSettingsState
           ),
         ),
       ],
+    );
+  }
+}
+
+class _JobRow extends StatelessWidget {
+  final _FileJob job;
+  const _JobRow({required this.job});
+
+  @override
+  Widget build(BuildContext context) {
+    final isProcessing = job.status == 'processing';
+    final isComplete   = job.status == 'completed';
+
+    final Color statusColor = isComplete
+        ? ArrestoColors.green
+        : isProcessing
+            ? ArrestoColors.orange
+            : ArrestoColors.red;
+
+    final Widget statusIcon = isProcessing
+        ? const SizedBox(
+            width: 14, height: 14,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.orange, strokeWidth: 2))
+        : Icon(
+            isComplete
+                ? Icons.check_circle_rounded
+                : Icons.error_outline_rounded,
+            color: statusColor,
+            size: 16,
+          );
+
+    final String statusLabel = isProcessing
+        ? 'Processing…'
+        : isComplete
+            ? '${job.chunksCreated ?? 0} chunks indexed'
+            : job.error ?? 'Failed';
+
+    final display = job.filename.length > 44
+        ? '…${job.filename.substring(job.filename.length - 42)}'
+        : job.filename;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isComplete
+            ? ArrestoColors.greenSoft
+            : isProcessing
+                ? ArrestoColors.amberSoft
+                : ArrestoColors.redSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        statusIcon,
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(display,
+                  style: ArrestoText.bodyBold(),
+                  overflow: TextOverflow.ellipsis),
+              Text(statusLabel, style: ArrestoText.xs(color: statusColor)),
+            ],
+          ),
+        ),
+      ]),
     );
   }
 }

@@ -1,19 +1,20 @@
 """
 api/routers/learners.py -- Admin learner management endpoints.
 
-GET /api/v1/learners             List all learners with summary stats derived from DB
-GET /api/v1/learners/{id}        Detail stats for one learner
+GET /api/v1/learners                      List learners with SQL-aggregated stats + ?q= search
+GET /api/v1/learners/{id}                 Summary stats for one learner
+GET /api/v1/learners/{id}/courses         Per-course breakdown for one learner
 """
 
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from api.dependencies import require_admin
+from sqlalchemy import func, distinct, case as sa_case
 
+from api.dependencies import require_admin
 from api.db import SessionLocal
 from api.models.profile import LearnerProfileRow
 from api.models.progress import AssessmentAttemptRow, LessonRecordRow
@@ -68,83 +69,223 @@ class LearnerSummary(BaseModel):
     status:      str
 
 
-# ── Route helpers ─────────────────────────────────────────────────────────────
-
-def _summarise(
-    learner_id: str,
-    records: list,
-    attempts: list,
-    profile: LearnerProfileRow | None,
-) -> LearnerSummary:
-    name  = (
-        profile.display_name if profile and profile.display_name
-        else _derive_name(learner_id)
-    )
-    email = learner_id if "@" in learner_id else ""
-
-    enrolled      = len({r.course_id for r in records})
-    total_lessons = len(records)
-    completed     = sum(1 for r in records if r.completed_at is not None)
-    progress      = int(completed / total_lessons * 100) if total_lessons else 0
-
-    time_secs = sum(
-        (r.completed_at - r.started_at)
-        for r in records
-        if r.completed_at and r.completed_at > r.started_at
-    )
-
-    last_ts = max((r.started_at for r in records), default=None)
-
-    return LearnerSummary(
-        id=learner_id,
-        name=name,
-        email=email,
-        enrolled=enrolled,
-        progress=progress,
-        last_active=_fmt_ago(last_ts),
-        time=_fmt_time(time_secs),
-        assessments=len(attempts),
-        status=_status(last_ts),
-    )
+class LearnerCourseStat(BaseModel):
+    course_id:   str
+    title:       str
+    total:       int    # lesson rows started
+    completed:   int
+    percent:     int    # 0-100
+    last_active: str
+    attempts:    int    # assessment attempts
+    best_score:  int    # 0-100; -1 = no attempts
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[LearnerSummary])
 def list_learners(
-    skip:  int = Query(0,   ge=0,  description="Number of learners to skip"),
-    limit: int = Query(100, ge=1, le=500, description="Max learners to return"),
+    skip:  int = Query(0,   ge=0,   description="Offset"),
+    limit: int = Query(100, ge=1,   le=500, description="Max results"),
+    q:     str = Query("",          description="Search by email/ID (partial match)"),
     _=Depends(require_admin),
 ):
-    """List every learner who has any activity in the DB, with summary stats."""
+    """
+    List every learner who has any activity, with SQL-aggregated stats.
+    Replaces the previous full table-scan + Python grouping approach.
+    """
     with SessionLocal() as db:
-        all_records  = db.query(LessonRecordRow).all()
-        all_attempts = db.query(AssessmentAttemptRow).all()
-        profiles     = {p.learner_id: p for p in db.query(LearnerProfileRow).all()}
+        # ── Lesson aggregation (one row per learner) ─────────────────────────
+        lesson_q = db.query(
+            LessonRecordRow.learner_id,
+            func.count(distinct(LessonRecordRow.course_id)).label("enrolled"),
+            func.count(LessonRecordRow.lesson_idx).label("total_lessons"),
+            func.sum(
+                sa_case((LessonRecordRow.completed_at.isnot(None), 1), else_=0)
+            ).label("completed"),
+            func.max(LessonRecordRow.started_at).label("last_ts"),
+            func.sum(
+                sa_case(
+                    (LessonRecordRow.completed_at.isnot(None),
+                     LessonRecordRow.completed_at - LessonRecordRow.started_at),
+                    else_=0,
+                )
+            ).label("time_secs"),
+        ).group_by(LessonRecordRow.learner_id)
 
-    by_records:  dict[str, list] = defaultdict(list)
-    by_attempts: dict[str, list] = defaultdict(list)
-    for r in all_records:
-        by_records[r.learner_id].append(r)
-    for a in all_attempts:
-        by_attempts[a.learner_id].append(a)
+        if q:
+            lesson_q = lesson_q.filter(LessonRecordRow.learner_id.ilike(f"%{q}%"))
 
-    learner_ids = sorted(set(by_records) | set(by_attempts))
-    results = [
-        _summarise(lid, by_records[lid], by_attempts[lid], profiles.get(lid))
-        for lid in learner_ids
-    ]
+        lesson_rows = {r.learner_id: r for r in lesson_q.all()}
 
-    # Active learners first, then alphabetical by name
+        # ── Assessment count per learner ─────────────────────────────────────
+        attempt_q = db.query(
+            AssessmentAttemptRow.learner_id,
+            func.count(AssessmentAttemptRow.id).label("cnt"),
+        ).group_by(AssessmentAttemptRow.learner_id)
+
+        if q:
+            attempt_q = attempt_q.filter(
+                AssessmentAttemptRow.learner_id.ilike(f"%{q}%")
+            )
+
+        attempt_counts = {r.learner_id: r.cnt for r in attempt_q.all()}
+
+        # ── Profiles (only for matched learners) ────────────────────────────
+        all_ids = list(set(lesson_rows) | set(attempt_counts))
+        profiles: dict = {}
+        if all_ids:
+            profiles = {
+                p.learner_id: p
+                for p in db.query(LearnerProfileRow)
+                           .filter(LearnerProfileRow.learner_id.in_(all_ids))
+                           .all()
+            }
+
+    results = []
+    for lid in all_ids:
+        row     = lesson_rows.get(lid)
+        profile = profiles.get(lid)
+
+        name  = (
+            profile.display_name if profile and profile.display_name
+            else _derive_name(lid)
+        )
+        email = lid if "@" in lid else ""
+
+        enrolled  = int(row.enrolled  or 0) if row else 0
+        total     = int(row.total_lessons or 0) if row else 0
+        completed = int(row.completed or 0) if row else 0
+        progress  = int(completed / total * 100) if total else 0
+        time_secs = float(row.time_secs or 0) if row else 0.0
+        last_ts   = float(row.last_ts) if row and row.last_ts else None
+
+        results.append(LearnerSummary(
+            id=lid,
+            name=name,
+            email=email,
+            enrolled=enrolled,
+            progress=progress,
+            last_active=_fmt_ago(last_ts),
+            time=_fmt_time(time_secs),
+            assessments=attempt_counts.get(lid, 0),
+            status=_status(last_ts),
+        ))
+
     sorted_results = sorted(results, key=lambda l: (l.status != "Active", l.name))
-    return sorted_results[skip : skip + limit]
+    return sorted_results[skip: skip + limit]
+
+
+@router.get("/{learner_id}/courses", response_model=list[LearnerCourseStat])
+def get_learner_courses(learner_id: str, _=Depends(require_admin)):
+    """Per-course progress breakdown for one learner."""
+    from api.models.courses import CourseScriptRow
+
+    with SessionLocal() as db:
+        lesson_rows = (
+            db.query(
+                LessonRecordRow.course_id,
+                func.count(LessonRecordRow.lesson_idx).label("total"),
+                func.sum(
+                    sa_case((LessonRecordRow.completed_at.isnot(None), 1), else_=0)
+                ).label("completed"),
+                func.max(LessonRecordRow.started_at).label("last_ts"),
+            )
+            .filter(LessonRecordRow.learner_id == learner_id)
+            .group_by(LessonRecordRow.course_id)
+            .all()
+        )
+
+        attempt_rows = (
+            db.query(
+                AssessmentAttemptRow.script_id,
+                func.count(AssessmentAttemptRow.id).label("cnt"),
+                func.max(AssessmentAttemptRow.score).label("best_score"),
+            )
+            .filter(AssessmentAttemptRow.learner_id == learner_id)
+            .group_by(AssessmentAttemptRow.script_id)
+            .all()
+        )
+
+        course_ids = {r.course_id for r in lesson_rows}
+        scripts: dict[str, str] = {}
+        if course_ids:
+            scripts = {
+                s.script_id: s.course_title
+                for s in db.query(CourseScriptRow)
+                           .filter(CourseScriptRow.script_id.in_(course_ids))
+                           .all()
+            }
+
+    attempt_map = {r.script_id: (int(r.cnt), int(r.best_score or 0)) for r in attempt_rows}
+
+    stats = []
+    for r in lesson_rows:
+        total     = int(r.total or 0)
+        completed = int(r.completed or 0)
+        cnt, best = attempt_map.get(r.course_id, (0, -1))
+        stats.append(LearnerCourseStat(
+            course_id=r.course_id,
+            title=scripts.get(r.course_id, r.course_id),
+            total=total,
+            completed=completed,
+            percent=int(completed / total * 100) if total else 0,
+            last_active=_fmt_ago(float(r.last_ts) if r.last_ts else None),
+            attempts=cnt,
+            best_score=best if cnt > 0 else -1,
+        ))
+
+    return sorted(stats, key=lambda s: s.title)
 
 
 @router.get("/{learner_id}", response_model=LearnerSummary)
 def get_learner(learner_id: str, _=Depends(require_admin)):
-    """Get summary stats for one learner."""
+    """Summary stats for one learner."""
     with SessionLocal() as db:
-        records  = db.query(LessonRecordRow).filter(LessonRecordRow.learner_id == learner_id).all()
-        attempts = db.query(AssessmentAttemptRow).filter(AssessmentAttemptRow.learner_id == learner_id).all()
-        profile  = db.get(LearnerProfileRow, learner_id)
-    return _summarise(learner_id, records, attempts, profile)
+        row = (
+            db.query(
+                func.count(distinct(LessonRecordRow.course_id)).label("enrolled"),
+                func.count(LessonRecordRow.lesson_idx).label("total_lessons"),
+                func.sum(
+                    sa_case((LessonRecordRow.completed_at.isnot(None), 1), else_=0)
+                ).label("completed"),
+                func.max(LessonRecordRow.started_at).label("last_ts"),
+                func.sum(
+                    sa_case(
+                        (LessonRecordRow.completed_at.isnot(None),
+                         LessonRecordRow.completed_at - LessonRecordRow.started_at),
+                        else_=0,
+                    )
+                ).label("time_secs"),
+            )
+            .filter(LessonRecordRow.learner_id == learner_id)
+            .one()
+        )
+        assessments = (
+            db.query(func.count(AssessmentAttemptRow.id))
+            .filter(AssessmentAttemptRow.learner_id == learner_id)
+            .scalar() or 0
+        )
+        profile = db.get(LearnerProfileRow, learner_id)
+
+    name  = (
+        profile.display_name if profile and profile.display_name
+        else _derive_name(learner_id)
+    )
+    email = learner_id if "@" in learner_id else ""
+
+    total     = int(row.total_lessons or 0)
+    completed = int(row.completed or 0)
+    progress  = int(completed / total * 100) if total else 0
+    last_ts   = float(row.last_ts) if row.last_ts else None
+
+    return LearnerSummary(
+        id=learner_id,
+        name=name,
+        email=email,
+        enrolled=int(row.enrolled or 0),
+        progress=progress,
+        last_active=_fmt_ago(last_ts),
+        time=_fmt_time(float(row.time_secs or 0)),
+        assessments=int(assessments),
+        status=_status(last_ts),
+    )

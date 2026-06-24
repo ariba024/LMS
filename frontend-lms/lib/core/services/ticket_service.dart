@@ -33,6 +33,11 @@ class TicketService {
     return Ticket.fromJson(resp.data as Map<String, dynamic>);
   }
 
+  static Future<Ticket> updatePriority(String id, String priority) async {
+    final resp = await apiClient.patch('/api/v1/tickets/$id', data: {'priority': priority});
+    return Ticket.fromJson(resp.data as Map<String, dynamic>);
+  }
+
   static Future<Ticket> addReply(String id, String body) async {
     final resp = await apiClient.post('/api/v1/tickets/$id/replies', data: {'body': body});
     return Ticket.fromJson(resp.data as Map<String, dynamic>);

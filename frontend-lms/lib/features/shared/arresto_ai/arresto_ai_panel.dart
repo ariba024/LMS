@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:js_util' as js_util;
 import 'dart:typed_data';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:dio/dio.dart' show DioException;
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/theme/colors.dart';
@@ -85,6 +88,36 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
     return _Voice.idle;
   }
 
+  String get _historyKey =>
+      'ai_history_${widget.lessonContext?.courseId ?? "global"}';
+
+  Future<void> _loadHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_historyKey);
+      if (raw != null && mounted) {
+        final list = jsonDecode(raw) as List;
+        setState(() {
+          _messages.addAll(list.map((m) => _Message(
+                text: m['text'] as String,
+                isUser: m['isUser'] as bool,
+              )));
+        });
+        _scrollToBottom();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = jsonEncode(_messages
+          .map((m) => {'text': m.text, 'isUser': m.isUser})
+          .toList());
+      await prefs.setString(_historyKey, json);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +128,7 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
         });
       }
     };
+    _loadHistory();
     // Defer STT init to first mic tap — requesting permission immediately on
     // panel open can be blocked silently by some browsers.
     if (widget.seedQuestion != null) {
@@ -442,14 +476,20 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
         _typing = false;
         _messages.add(_Message(text: answer, isUser: false));
       });
+      _saveHistory();
     } catch (e) {
       if (!mounted) return;
+      String errText;
+      if (e is DioException) {
+        final data = e.response?.data;
+        final detail = (data is Map) ? data['detail'] as String? : null;
+        errText = detail ?? 'Request failed (HTTP ${e.response?.statusCode ?? 'no response'}).';
+      } else {
+        errText = 'Could not reach the AI. Is the backend running?';
+      }
       setState(() {
         _typing = false;
-        _messages.add(_Message(
-          text: 'Sorry, I could not reach the AI right now. Please check that the backend is running.',
-          isUser: false,
-        ));
+        _messages.add(_Message(text: errText, isUser: false));
       });
     }
     _scrollToBottom();

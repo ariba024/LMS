@@ -78,6 +78,12 @@ class _LearnerSidebar extends ConsumerWidget {
                   location: location,
                 ),
                 _NavItem(
+                  icon: Icons.bar_chart_rounded,
+                  label: 'My Progress',
+                  route: '/learner/my-progress',
+                  location: location,
+                ),
+                _NavItem(
                   icon: Icons.assignment_rounded,
                   label: 'Assessments',
                   route: '/learner/assessments',

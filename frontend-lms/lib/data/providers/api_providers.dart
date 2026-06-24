@@ -5,7 +5,8 @@ import '../../core/services/api_client.dart';
 import '../../core/services/assessment_service.dart';
 import '../../core/services/course_service.dart';
 import '../../core/services/document_service.dart';
-import '../../core/services/learner_service.dart';
+import '../../core/services/attention_service.dart' show AttentionService, LessonAttentionStat;
+import '../../core/services/learner_service.dart' show LearnerService, LearnerCourseStat, ProfileData;
 import '../../core/services/notification_service.dart';
 import '../../core/services/progress_service.dart';
 import '../../core/services/tutor_service.dart';
@@ -229,10 +230,11 @@ final profileProvider =
   (ref, learnerId) => LearnerService.getProfile(learnerId),
 );
 
-// ── Admin: learners list ──────────────────────────────────────────────────────
+// ── Admin: learners list (family keyed on search query) ───────────────────────
+// Pass empty string for unfiltered. Backend applies SQL ILIKE search.
 final learnersApiProvider =
-    FutureProvider.autoDispose<List<Learner>>(
-  (ref) => LearnerService.listLearners(),
+    FutureProvider.autoDispose.family<List<Learner>, String>(
+  (ref, q) => LearnerService.listLearners(q: q),
 );
 
 // ── Admin: single learner detail ──────────────────────────────────────────────
@@ -241,10 +243,46 @@ final learnerDetailApiProvider =
   (ref, learnerId) => LearnerService.getLearnerDetail(learnerId),
 );
 
+// ── Admin: per-course breakdown for one learner ───────────────────────────────
+final learnerCoursesProvider =
+    FutureProvider.autoDispose.family<List<LearnerCourseStat>, String>(
+  (ref, learnerId) => LearnerService.getLearnerCourses(learnerId),
+);
+
+// ── Admin: per-lesson attention summary for one learner ──────────────────────
+final learnerAttentionProvider =
+    FutureProvider.autoDispose.family<List<LessonAttentionStat>, String>(
+  (ref, learnerId) async {
+    try {
+      return await AttentionService.getSummary(learnerId);
+    } catch (_) {
+      return const [];
+    }
+  },
+);
+
 // ── Analytics overview ────────────────────────────────────────────────────────
 final analyticsOverviewProvider =
     FutureProvider.autoDispose<AnalyticsOverview>(
   (ref) => AnalyticsService.getOverview(),
+);
+
+// ── Per-course analytics ──────────────────────────────────────────────────────
+final courseStatsProvider =
+    FutureProvider.autoDispose<List<CourseStatItem>>(
+  (ref) => AnalyticsService.getCourseStats(),
+);
+
+// ── AI Tutor analytics ────────────────────────────────────────────────────────
+final tutorStatsProvider =
+    FutureProvider.autoDispose<TutorStats>(
+  (ref) => AnalyticsService.getTutorStats(),
+);
+
+// ── Learner engagement funnel ─────────────────────────────────────────────────
+final funnelProvider =
+    FutureProvider.autoDispose<List<FunnelStep>>(
+  (ref) => AnalyticsService.getFunnel(),
 );
 
 // ── Notifications (real API) ──────────────────────────────────────────────────

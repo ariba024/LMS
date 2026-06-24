@@ -124,6 +124,14 @@ class _AdminStatsGrid extends ConsumerWidget {
           jobs.where((j) => j.status == 'running' || j.status == 'pending').length.toString(),
       orElse: () => '—',
     );
+    final learningHours = analyticsAsync.maybeWhen(
+      data: (o) => '${o.totalLearningHours}h',
+      orElse: () => '—',
+    );
+    final newThisMonth = analyticsAsync.maybeWhen(
+      data: (o) => o.newThisMonth.toString(),
+      orElse: () => '—',
+    );
 
     return LayoutBuilder(builder: (ctx, c) {
       final cols = c.maxWidth > 1000 ? 4 : c.maxWidth > 600 ? 3 : 2;
@@ -164,19 +172,29 @@ class _AdminStatsGrid extends ConsumerWidget {
             iconColor: ArrestoColors.orange,
             barColor: ArrestoColors.orange,
           ),
-          const StatCard(
+          StatCard(
             title: 'Learning Hours',
-            value: '—',
+            value: learningHours,
             icon: Icons.schedule_rounded,
             iconColor: ArrestoColors.blue,
             barColor: ArrestoColors.blue,
           ),
-          const StatCard(
+          StatCard(
             title: 'AI Conversations',
-            value: '—',
+            value: analyticsAsync.maybeWhen(
+              data: (o) => o.totalAiSessions.toString(),
+              orElse: () => '—',
+            ),
             icon: Icons.chat_rounded,
             iconColor: ArrestoColors.amber,
             barColor: ArrestoColors.amber,
+          ),
+          StatCard(
+            title: 'New This Month',
+            value: newThisMonth,
+            icon: Icons.person_add_rounded,
+            iconColor: ArrestoColors.green,
+            barColor: ArrestoColors.green,
           ),
           StatCard(
             title: 'Generating Now',

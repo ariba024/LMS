@@ -131,12 +131,30 @@ def _build_messages(user_content: str, history: list[dict]) -> list[dict]:
 def _call_llm(system: str, messages: list[dict], api_key: str, max_tokens: int = 1500) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=settings.llm_model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
-    )
+    try:
+        response = client.messages.create(
+            model=settings.llm_model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+        )
+    except anthropic.AuthenticationError:
+        raise RuntimeError(
+            "Anthropic API key is invalid or expired. "
+            "Update ANTHROPIC_API_KEY in your .env file."
+        )
+    except anthropic.BadRequestError as exc:
+        msg = str(exc).lower()
+        if "credit balance" in msg or "billing" in msg:
+            raise RuntimeError(
+                "Anthropic account has insufficient credits. "
+                "Add credits at console.anthropic.com → Plans & Billing."
+            )
+        raise RuntimeError(f"Anthropic rejected the request: {exc}")
+    except anthropic.RateLimitError:
+        raise RuntimeError("Anthropic API rate limit reached. Please wait a moment and try again.")
+    except anthropic.OverloadedError:
+        raise RuntimeError("Anthropic API is temporarily overloaded. Please try again shortly.")
     return response.content[0].text
 
 

@@ -34,6 +34,7 @@ import '../../features/admin/courses/all_courses_screen.dart';
 import '../../features/admin/video/video_management_screen.dart';
 import '../../features/learner/gamification/gamification_hub_screen.dart';
 import '../../features/learner/gamification/gamification_courses_screen.dart';
+import '../../features/learner/my_progress/my_progress_screen.dart';
 
 // Bridges Riverpod auth state changes to GoRouter's refreshListenable
 class _AuthChangeNotifier extends ChangeNotifier {
@@ -165,6 +166,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/learner/ai',
             pageBuilder: (ctx, state) => _fade(state, const ArrestoAiScreen()),
+          ),
+          GoRoute(
+            path: '/learner/my-progress',
+            pageBuilder: (ctx, state) => _fade(state, const MyProgressScreen()),
           ),
           GoRoute(
             path: '/learner/gamification',

@@ -8,9 +8,13 @@ GET  /api/v1/progress/{learner_id}/recommendations      Adaptive learning recomm
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from api.db import get_db
 from api.dependencies import get_current_user, get_progress_tracker
+from api.models.progress import WeakTopicRow
 from api.models.users import UserRow
+from api.routers.gamification import award_lesson_xp
 from api.schemas import (
     LearnerProgressResponse,
     LessonRecordItem,
@@ -140,6 +144,7 @@ def record_lesson_complete(
     body: _LessonCompleteRequest,
     progress_tracker=Depends(get_progress_tracker),
     current_user: UserRow = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Mark a lesson as completed.  If `score` is present the lesson had a
@@ -154,10 +159,18 @@ def record_lesson_complete(
         progress_tracker.record_lesson_checkpoint(
             effective_id, course_id, body.module_idx, body.lesson_idx, body.score
         )
+        # Award XP proportional to KC score (50 base + up to 50 bonus)
+        xp = 50 + round(body.score * 50)
     else:
         progress_tracker.record_lesson_complete(
             effective_id, course_id, body.module_idx, body.lesson_idx
         )
+        xp = 50  # flat XP for watching a lesson without a quiz
+
+    try:
+        award_lesson_xp(effective_id, course_id, xp, db)
+    except Exception:
+        pass  # XP is non-critical; don't fail the progress record
 
 
 @router.post("/{learner_id}/course/{course_id}/quiz-attempt", status_code=204)
@@ -259,3 +272,40 @@ def get_recommendations(
     effective_id = learner_id if current_user.role == "admin" else current_user.email
     recs = progress_tracker.get_recommendations(effective_id, course_id)
     return [RecommendationItem(**r) for r in recs]
+
+
+class _WeakTopicAdminItem(BaseModel):
+    course_id: str
+    topic: str
+    accuracy: float
+    total_attempts: int
+
+
+@router.get("/{learner_id}/weak-topics", response_model=list[_WeakTopicAdminItem])
+def get_learner_weak_topics(
+    learner_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserRow = Depends(get_current_user),
+):
+    """All weak topics for a learner across all courses. Admin or self only."""
+    if current_user.role != "admin" and current_user.email != learner_id:
+        raise HTTPException(status_code=403, detail="Access denied.")
+    rows = (
+        db.query(WeakTopicRow)
+        .filter(
+            WeakTopicRow.learner_id == learner_id,
+            WeakTopicRow.total_count > 0,
+        )
+        .all()
+    )
+    return [
+        _WeakTopicAdminItem(
+            course_id=r.course_id,
+            topic=r.topic,
+            accuracy=round(
+                (r.total_count - r.miss_count) / r.total_count, 2
+            ),
+            total_attempts=r.total_count,
+        )
+        for r in rows
+    ]

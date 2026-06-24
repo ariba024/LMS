@@ -36,6 +36,33 @@ class DocumentInfo {
   }
 }
 
+/// Status of one upload job returned by GET /api/v1/documents/jobs/{id}.
+class UploadJobStatus {
+  final String jobId;
+  final String filename;
+  final String status; // pending | processing | completed | failed
+  final String? error;
+  final int? chunksCreated;
+
+  const UploadJobStatus({
+    required this.jobId,
+    required this.filename,
+    required this.status,
+    this.error,
+    this.chunksCreated,
+  });
+
+  factory UploadJobStatus.fromJson(Map<String, dynamic> j) => UploadJobStatus(
+        jobId: j['job_id'] as String,
+        filename: j['filename'] as String? ?? '',
+        status: j['status'] as String? ?? 'pending',
+        error: j['error'] as String?,
+        chunksCreated: j['chunks_created'] as int?,
+      );
+
+  bool get isTerminal => status == 'completed' || status == 'failed';
+}
+
 class DocumentService {
   static Future<List<DocumentInfo>> listDocuments() async {
     final resp = await apiClient.get('/api/v1/documents');
@@ -45,25 +72,9 @@ class DocumentService {
         .toList();
   }
 
-  static Future<void> uploadDocument(
-      List<int> bytes, String filename) async {
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
-    });
-    await apiClient.post(
-      '/api/v1/documents/upload',
-      data: formData,
-      options: Options(
-        // First upload triggers model downloads on the server (bge-m3 ~570 MB,
-        // EasyOCR ~150 MB for scanned PDFs). Allow up to 10 minutes.
-        receiveTimeout: const Duration(minutes: 10),
-      ),
-    );
-  }
-
-  /// Upload multiple files in one request via POST /documents/batch-upload.
-  /// Returns a list of per-file results: {filename, status, chunks, error}.
-  static Future<List<Map<String, dynamic>>> batchUploadDocuments(
+  /// Start uploading multiple files. Returns immediately with job IDs — the
+  /// server ingests each file in the background. Use [getJobStatus] to poll.
+  static Future<List<UploadJobStatus>> startBatchUpload(
       List<({String name, List<int> bytes})> files) async {
     final formData = FormData.fromMap({
       'files': files
@@ -73,10 +84,25 @@ class DocumentService {
     final resp = await apiClient.post(
       '/api/v1/documents/batch-upload',
       data: formData,
-      options: Options(receiveTimeout: const Duration(minutes: 15)),
+      options: Options(
+        // Only wait for the server to accept and save the raw files — fast.
+        receiveTimeout: const Duration(minutes: 2),
+      ),
     );
-    final results = (resp.data as Map<String, dynamic>)['results'] as List? ?? [];
-    return results.cast<Map<String, dynamic>>();
+    final submitted = (resp.data['submitted'] as List?) ?? [];
+    return submitted
+        .map((j) => UploadJobStatus(
+              jobId: j['job_id'] as String,
+              filename: j['filename'] as String,
+              status: 'processing',
+            ))
+        .toList();
+  }
+
+  /// Poll the status of one upload job.
+  static Future<UploadJobStatus> getJobStatus(String jobId) async {
+    final resp = await apiClient.get('/api/v1/documents/jobs/$jobId');
+    return UploadJobStatus.fromJson(resp.data as Map<String, dynamic>);
   }
 
   /// URL for downloading the original file from the backend.

@@ -47,6 +47,7 @@ class _GamificationHubScreenState extends State<GamificationHubScreen> {
                   totalXp: 0,
                   dailyQXp: 0,
                   hazardXp: 0,
+                  lessonXp: 0,
                   dailyQStreak: 0,
                 )),
         gamificationService

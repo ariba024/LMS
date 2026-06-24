@@ -1571,6 +1571,34 @@ class _StepStyleState extends State<_StepStyle> {
             );
           },
         ),
+        if (_styles[_selected].$4 != 'modern') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: const Color(0xFFFFCC02).withValues(alpha: 0.5)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 16, color: Color(0xFF856404)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'HeyGen v3 subscription required — not available on this account. '
+                    'This course will render using AI Presenter style instead.',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF856404), height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

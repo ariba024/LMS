@@ -89,6 +89,7 @@ class LearnerXPRow(Base):
     total_xp: Mapped[int] = Column(Integer, nullable=False, default=0)
     daily_q_xp: Mapped[int] = Column(Integer, nullable=False, default=0)
     hazard_xp: Mapped[int] = Column(Integer, nullable=False, default=0)
+    lesson_xp: Mapped[int] = Column(Integer, nullable=False, default=0)
     daily_q_streak: Mapped[int] = Column(Integer, nullable=False, default=0)
     last_daily_q_date: Mapped[str | None] = Column(String)
     updated_at: Mapped[float] = Column(Float, nullable=False, default=0.0)

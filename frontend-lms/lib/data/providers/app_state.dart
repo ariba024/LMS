@@ -1,12 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/services/ticket_service.dart';
-import '../models/course.dart';
 import '../models/learner.dart';
 import '../models/lesson.dart';
 import '../models/question.dart';
 import '../models/ticket.dart';
-import '../../core/widgets/course_thumb.dart';
 
 // ─── Role ────────────────────────────────────────────────────────────────────
 enum UserRole { learner, admin }
@@ -15,108 +13,6 @@ final roleProvider = Provider<UserRole>((ref) {
   final user = ref.watch(authProvider).user;
   return user?.isAdmin == true ? UserRole.admin : UserRole.learner;
 });
-
-// ─── Mock Courses ─────────────────────────────────────────────────────────────
-final mockCourses = [
-  const Course(
-    id: 'c1',
-    title: 'Working at Heights — Foundation',
-    desc: 'Core principles of fall protection for construction and industrial environments.',
-    cat: 'FALL PROTECTION',
-    style: CourseStyle.animated,
-    status: 'published',
-    level: 'Beginner',
-    lessons: 8,
-    mins: 95,
-    progress: 62,
-    learners: 284,
-    rating: 4.8,
-    certified: false,
-    code: 'WAH-181',
-  ),
-  const Course(
-    id: 'c2',
-    title: 'Harness Inspection & Fit',
-    desc: 'Step-by-step inspection procedures and correct harness fitting techniques.',
-    cat: 'EQUIPMENT',
-    style: CourseStyle.whiteboard,
-    status: 'published',
-    level: 'Intermediate',
-    lessons: 6,
-    mins: 70,
-    progress: 100,
-    learners: 196,
-    rating: 4.7,
-    certified: true,
-    code: 'EQP-042',
-  ),
-  const Course(
-    id: 'c3',
-    title: 'Anchor Point Selection',
-    desc: 'Identifying and using correct anchor points for fall arrest systems.',
-    cat: 'FALL PROTECTION',
-    style: CourseStyle.claude,
-    status: 'published',
-    level: 'Advanced',
-    lessons: 10,
-    mins: 120,
-    progress: 0,
-    learners: 142,
-    rating: 4.9,
-    certified: false,
-    code: 'WAH-205',
-  ),
-  const Course(
-    id: 'c4',
-    title: 'Emergency Rescue Procedures',
-    desc: 'Suspended worker rescue protocols and emergency response planning.',
-    cat: 'EMERGENCY',
-    style: CourseStyle.hybrid,
-    status: 'published',
-    level: 'Advanced',
-    lessons: 12,
-    mins: 145,
-    progress: 30,
-    learners: 98,
-    rating: 4.6,
-    certified: false,
-    code: 'EMR-088',
-  ),
-  const Course(
-    id: 'c5',
-    title: 'Site Safety Fundamentals',
-    desc: 'Overview of hazard identification and site safety management systems.',
-    cat: 'SITE SAFETY',
-    style: CourseStyle.animated,
-    status: 'published',
-    level: 'Beginner',
-    lessons: 7,
-    mins: 80,
-    progress: 0,
-    learners: 356,
-    rating: 4.5,
-    certified: false,
-    code: 'SIT-011',
-  ),
-  const Course(
-    id: 'c6',
-    title: 'Scaffolding Safety',
-    desc: 'Safe erection, use, and dismantling of scaffolding structures.',
-    cat: 'EQUIPMENT',
-    style: CourseStyle.whiteboard,
-    status: 'draft',
-    level: 'Intermediate',
-    lessons: 9,
-    mins: 110,
-    progress: 0,
-    learners: 0,
-    rating: 0,
-    certified: false,
-    code: 'SCF-033',
-  ),
-];
-
-final coursesProvider = Provider<List<Course>>((ref) => mockCourses);
 
 // ─── Mock Lessons ─────────────────────────────────────────────────────────────
 final mockLessons = [
@@ -265,6 +161,14 @@ class TicketsNotifier extends AsyncNotifier<List<Ticket>> {
 
   Future<void> updateStatus(String id, String newStatus) async {
     final updated = await TicketService.updateStatus(id, newStatus);
+    state = AsyncData([
+      for (final t in state.valueOrNull ?? [])
+        if (t.id == id) updated else t,
+    ]);
+  }
+
+  Future<void> updatePriority(String id, String newPriority) async {
+    final updated = await TicketService.updatePriority(id, newPriority);
     state = AsyncData([
       for (final t in state.valueOrNull ?? [])
         if (t.id == id) updated else t,

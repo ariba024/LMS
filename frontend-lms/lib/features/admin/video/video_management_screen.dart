@@ -205,6 +205,42 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
     }
   }
 
+  Future<void> _generateAudio(String scriptId) async {
+    try {
+      await VideoService.generateAudio(scriptId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Audio generation started — Sarvam TTS is pre-warming all lessons'),
+        backgroundColor: ArrestoColors.ink,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Audio generation failed: $e'),
+        backgroundColor: ArrestoColors.red,
+      ));
+    }
+  }
+
+  Future<void> _deleteRender(String scriptId, String renderId) async {
+    try {
+      await VideoService.deleteRender(renderId);
+      if (!mounted) return;
+      setState(() {
+        final list = _renders[scriptId];
+        if (list != null) {
+          _renders[scriptId] = list.where((r) => r.renderId != renderId).toList();
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Delete failed: $e'),
+        backgroundColor: ArrestoColors.red,
+      ));
+    }
+  }
+
   Future<void> _openReviewDialog(
     String scriptId, {
     required String lessonTitle,
@@ -368,6 +404,8 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
         onVoiceChanged: (v) =>
             setState(() => _courseVoice[courses[i].id] = v),
         onRenderAll: () => _renderAll(courses[i].id),
+        onGenerateAudio: () => _generateAudio(courses[i].id),
+        onDeleteRender: (renderId) => _deleteRender(courses[i].id, renderId),
         onRenderLesson: ({
           int? moduleNumber,
           int? lessonNumber,
@@ -428,6 +466,8 @@ class _CourseCard extends StatelessWidget {
     int? itemIndex,
     String lang,
   }) onReviewLesson;
+  final VoidCallback onGenerateAudio;
+  final void Function(String renderId) onDeleteRender;
 
   const _CourseCard({
     required this.course,
@@ -443,6 +483,8 @@ class _CourseCard extends StatelessWidget {
     required this.onRenderAll,
     required this.onRenderLesson,
     required this.onReviewLesson,
+    required this.onGenerateAudio,
+    required this.onDeleteRender,
   });
 
   /// Returns newest job per scene_index for this lessonRef.
@@ -689,7 +731,36 @@ class _CourseCard extends StatelessWidget {
             }).toList(),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+
+          // HeyGen availability warning
+          if (_isHeyGenStyle(style)) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: const Color(0xFFFFCC02).withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 14, color: Color(0xFF856404)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'HeyGen v3 subscription required — not available on this '
+                      'account. Renders will fall back to AI Presenter style.',
+                      style: ArrestoText.xs(color: const Color(0xFF856404)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
 
           // Voice selector — Male/Female for HeyGen, Sarvam speakers otherwise
           if (_isHeyGenStyle(style)) ...[
@@ -823,6 +894,14 @@ class _CourseCard extends StatelessWidget {
             variant: ArrestoButtonVariant.dark,
             icon: const Icon(Icons.video_call_rounded),
             onPressed: onRenderAll,
+          ),
+          const SizedBox(height: 8),
+          ArrestoButton(
+            label: 'Generate Audio Only',
+            fullWidth: true,
+            variant: ArrestoButtonVariant.ghost,
+            icon: const Icon(Icons.headphones_rounded),
+            onPressed: onGenerateAudio,
           ),
         ],
       ),
@@ -1179,48 +1258,70 @@ class _CourseCard extends StatelessWidget {
               ),
             )
           else
-            GestureDetector(
-              onTap: onRender,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: status == 'completed'
-                      ? ArrestoColors.green.withValues(alpha: 0.08)
-                      : ArrestoColors.ink.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(
-                    color: status == 'completed'
-                        ? ArrestoColors.green.withValues(alpha: 0.3)
-                        : ArrestoColors.lineStrong,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      status == 'completed'
-                          ? Icons.refresh_rounded
-                          : Icons.play_arrow_rounded,
-                      size: 13,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: onRender,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
                       color: status == 'completed'
-                          ? ArrestoColors.green
-                          : ArrestoColors.textSecondary,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      status == 'completed' ? 'Re-render' : 'Render',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                          ? ArrestoColors.green.withValues(alpha: 0.08)
+                          : ArrestoColors.ink.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
                         color: status == 'completed'
-                            ? ArrestoColors.green
-                            : ArrestoColors.textSecondary,
+                            ? ArrestoColors.green.withValues(alpha: 0.3)
+                            : ArrestoColors.lineStrong,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          status == 'completed'
+                              ? Icons.refresh_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 13,
+                          color: status == 'completed'
+                              ? ArrestoColors.green
+                              : ArrestoColors.textSecondary,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          status == 'completed' ? 'Re-render' : 'Render',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: status == 'completed'
+                                ? ArrestoColors.green
+                                : ArrestoColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                if (job != null) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => onDeleteRender(job.renderId),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: ArrestoColors.red.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                            color: ArrestoColors.red.withValues(alpha: 0.25)),
+                      ),
+                      child: const Icon(Icons.delete_outline_rounded,
+                          size: 13, color: ArrestoColors.red),
+                    ),
+                  ),
+                ],
+              ],
             ),
         ],
       ),

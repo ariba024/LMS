@@ -19,12 +19,15 @@ import '../../../core/services/course_service.dart';
 import '../../../core/services/question_service.dart';
 import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/services/video_service.dart' show VideoRenderJob;
+import '../../../core/services/attention_service.dart';
 import '../../../core/services/focus_detection_service.dart';
 import 'focus_overlay.dart';
 import '../../../data/models/lesson.dart' show CourseLesson;
 import '../../../data/models/course.dart';
+import '../../../core/widgets/course_thumb.dart' show CourseStyle;
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
 import '../../../core/services/progress_service.dart';
+import '../../../core/services/gamification_service.dart';
 
 // ── Note model (persisted) ──────────────────────────────────────────────────
 class _Note {
@@ -66,7 +69,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   int? _realVideoDurationSecs; // set once the actual video loads
   bool _showKCheck = false;
   bool _kcDone = false;
-  int _xp = 120;
+  int _xp = 0;
   int _answered = 0;
   bool _muted = false;
   String _activeTab = 'Notes';
@@ -110,6 +113,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     if (mockLesson != null) _posSecs = mockLesson.savedPositionSecs;
     _track('lesson_open');
     _loadNotes();
+    _loadXp();
   }
 
   @override
@@ -191,6 +195,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       moduleIdx: _moduleIdx,
       lessonIdx: _lessonIdx,
     ).catchError((_) {});
+  }
+
+  Future<void> _loadXp() async {
+    try {
+      final learnerId = ref.read(learnerIdProvider);
+      final profile = await gamificationService.getProfile(learnerId, widget.courseId);
+      if (mounted) setState(() => _xp = profile.totalXp);
+    } catch (_) {}
   }
 
   // ── Scene URL builder ──────────────────────────────────────────────────────
@@ -370,6 +382,20 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       _togglePlay();
       setState(() => _showDistractedOverlay = true);
       _track('focus_distracted', {'posSecs': _posSecs});
+      AttentionService.logEvent(
+        courseId: widget.courseId,
+        lessonId: widget.lessonId,
+        eventType: 'distracted',
+        posSecs: _posSecs,
+      );
+    } else if (status == FocusStatus.warning) {
+      _track('focus_warning', {'posSecs': _posSecs});
+      AttentionService.logEvent(
+        courseId: widget.courseId,
+        lessonId: widget.lessonId,
+        eventType: 'warning',
+        posSecs: _posSecs,
+      );
     }
   }
 
@@ -377,6 +403,12 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     setState(() => _showDistractedOverlay = false);
     if (!_playing) _togglePlay();
     _track('focus_returned', {'posSecs': _posSecs});
+    AttentionService.logEvent(
+      courseId: widget.courseId,
+      lessonId: widget.lessonId,
+      eventType: 'returned',
+      posSecs: _posSecs,
+    );
   }
 
   void _onQuestionSubmit(QuestionResult result) {
@@ -548,17 +580,34 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     // Record lesson start once the lesson object is available
     WidgetsBinding.instance.addPostFrameCallback((_) => _initProgress(lesson));
 
-    // Resolve course: try real API detail, fall back to mock list
+    // Resolve course: try real API detail, then library list, then placeholder
     final courseAsync = ref.watch(courseDetailProvider(widget.courseId));
     final Course course;
     final courseDetail = courseAsync.valueOrNull;
     if (courseDetail != null && courseDetail.isNotEmpty) {
       course = CourseService.courseFromDetail(courseDetail);
     } else {
-      final mockCourses = ref.watch(coursesProvider);
-      course = mockCourses.firstWhere(
+      final liveCourses = ref.watch(libraryProvider).valueOrNull ?? const <Course>[];
+      course = liveCourses.firstWhere(
         (c) => c.id == widget.courseId,
-        orElse: () => mockCourses.first,
+        orElse: () => liveCourses.isNotEmpty
+            ? liveCourses.first
+            : Course(
+                id: widget.courseId,
+                title: 'Course',
+                desc: '',
+                cat: '',
+                style: CourseStyle.animated,
+                status: 'published',
+                level: '',
+                lessons: 0,
+                mins: 0,
+                progress: 0,
+                learners: 0,
+                rating: 0,
+                certified: false,
+                code: '',
+              ),
       );
     }
 
@@ -697,10 +746,15 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         .watch(recommendationsProvider(widget.courseId))
         .valueOrNull ?? const [];
 
+    final knowledgeScore = _kcQuestions.isEmpty
+        ? null
+        : _kcCorrect / _kcQuestions.length;
+
     final sidebar = _RightSidebar(
       lesson: lesson, course: course, courseLessons: courseLessons,
       lessonIndex: lessonIndex, lessonProgress: progress,
       xp: _xp, answered: _answered, courseProgress: course.progress / 100,
+      knowledgeScore: knowledgeScore,
       recommendations: recommendations,
       onGoToQuiz: _goToQuiz,
       onAskAi: () => _openAI(),
@@ -902,9 +956,12 @@ class _VideoBoxState extends State<_VideoBox> {
   String? _loadedUrl;
   Timer? _endFallbackTimer;
 
+  final _narrationTts = SarvamTtsPlayer();
+
   @override
   void initState() {
     super.initState();
+    _narrationTts.onStateChange = () { if (mounted) setState(() {}); };
     if (widget.videoUrl != null) _initVideo(widget.videoUrl!);
   }
 
@@ -993,6 +1050,7 @@ class _VideoBoxState extends State<_VideoBox> {
   void dispose() {
     _endFallbackTimer?.cancel();
     _vc?.dispose();
+    _narrationTts.dispose();
     super.dispose();
   }
 
@@ -1018,33 +1076,100 @@ class _VideoBoxState extends State<_VideoBox> {
                 ),
                 child: widget.videoUrl == null
                     ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              widget.renderMessage != null && widget.renderMessage!.contains('failed')
-                                  ? Icons.error_outline_rounded
-                                  : widget.renderMessage != null
-                                      ? Icons.hourglass_top_rounded
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.renderMessage != null &&
+                                  widget.renderMessage!.contains('being generated'))
+                                const SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white30,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  widget.renderMessage != null &&
+                                          widget.renderMessage!.contains('unavailable')
+                                      ? Icons.error_outline_rounded
                                       : Icons.videocam_off_rounded,
-                              color: Colors.white30,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              widget.renderMessage ?? 'Video not yet generated for this lesson',
-                              style: const TextStyle(color: Colors.white38, fontSize: 13),
-                              textAlign: TextAlign.center,
-                            ),
-                            if (widget.onRefreshVideo != null) ...[
+                                  color: Colors.white30,
+                                  size: 36,
+                                ),
                               const SizedBox(height: 12),
-                              TextButton.icon(
-                                onPressed: widget.onRefreshVideo,
-                                icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.white38),
-                                label: const Text('Refresh', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                              Text(
+                                widget.renderMessage ??
+                                    'Video not yet generated for this lesson.\n'
+                                    'Contact your course admin to get it rendered.',
+                                style: const TextStyle(
+                                    color: Colors.white54, fontSize: 13, height: 1.5),
+                                textAlign: TextAlign.center,
                               ),
+                              // Audio fallback: listen to narration while video is pending
+                              if (widget.lesson.narrationScript?.isNotEmpty == true) ...[
+                                const SizedBox(height: 16),
+                                GestureDetector(
+                                  onTap: () {
+                                    final script = widget.lesson.narrationScript!;
+                                    if (_narrationTts.isSpeaking) {
+                                      _narrationTts.pause();
+                                    } else if (_narrationTts.isPaused) {
+                                      _narrationTts.resume();
+                                    } else {
+                                      _narrationTts.speak(script).catchError((_) {});
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 9),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(24),
+                                      border: Border.all(color: Colors.white24),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _narrationTts.isSpeaking
+                                              ? Icons.pause_rounded
+                                              : Icons.headphones_rounded,
+                                          color: Colors.white60,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _narrationTts.isSpeaking
+                                              ? 'Pause narration'
+                                              : _narrationTts.isPaused
+                                                  ? 'Resume narration'
+                                                  : 'Listen to narration',
+                                          style: const TextStyle(
+                                              color: Colors.white60,
+                                              fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (widget.onRefreshVideo != null) ...[
+                                const SizedBox(height: 10),
+                                TextButton.icon(
+                                  onPressed: widget.onRefreshVideo,
+                                  icon: const Icon(Icons.refresh_rounded,
+                                      size: 15, color: Colors.white38),
+                                  label: const Text('Check again',
+                                      style: TextStyle(
+                                          color: Colors.white38, fontSize: 12)),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       )
                     : null,
@@ -1851,6 +1976,7 @@ class _RightSidebar extends StatelessWidget {
   final int lessonIndex;
   final double lessonProgress, courseProgress;
   final int xp, answered;
+  final double? knowledgeScore;
   final List<Recommendation> recommendations;
   final VoidCallback onGoToQuiz, onAskAi;
   final Function(String) onSelectTool;
@@ -1860,6 +1986,7 @@ class _RightSidebar extends StatelessWidget {
     required this.lessonIndex, required this.lessonProgress, required this.courseProgress,
     required this.xp, required this.answered, required this.recommendations,
     required this.onGoToQuiz, required this.onAskAi, required this.onSelectTool,
+    this.knowledgeScore,
   });
 
   @override
@@ -1887,7 +2014,10 @@ class _RightSidebar extends StatelessWidget {
             const SizedBox(height: 12),
             _progressRow('Lesson progress', lessonProgress, ArrestoColors.amber),
             const SizedBox(height: 8),
-            _progressRow('Knowledge score', 1.0, ArrestoColors.green),
+            if (knowledgeScore != null)
+              _progressRow('Knowledge score', knowledgeScore!, ArrestoColors.green)
+            else
+              _progressRow('Knowledge score', 0.0, ArrestoColors.line),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: Column(children: [

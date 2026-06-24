@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
@@ -53,6 +55,39 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
   final Map<String, _InputMode> _modes = {};
   // questionId → typed answer draft
   final Map<String, TextEditingController> _typeCtrl = {};
+  // answers loaded from prefs, applied once questions are available
+  Map<String, String>? _pendingDraft;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDraft();
+  }
+
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('quiz_draft_${widget.courseId}');
+    if (raw == null || !mounted) return;
+    try {
+      final map = (jsonDecode(raw) as Map).cast<String, String>();
+      if (mounted) setState(() => _pendingDraft = map);
+    } catch (_) {}
+  }
+
+  Future<void> _saveDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_answers.isEmpty) {
+      await prefs.remove('quiz_draft_${widget.courseId}');
+    } else {
+      await prefs.setString(
+          'quiz_draft_${widget.courseId}', jsonEncode(_answers));
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('quiz_draft_${widget.courseId}');
+  }
 
   @override
   void dispose() {
@@ -87,7 +122,23 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
     _loadedQuestions = questions;
     _passPct         = passPct;
     _totalSeconds    = timeMin * 60;
-    setState(() => _secondsLeft = _totalSeconds);
+    setState(() {
+      _secondsLeft = _totalSeconds;
+      // Restore draft answers now that we have the question objects
+      if (_pendingDraft != null) {
+        for (final q in questions) {
+          final saved = _pendingDraft![q.id];
+          if (saved == null) continue;
+          _answers[q.id] = saved;
+          _results[q.id] = _LocalResult(
+            correct:       saved == q.correctAnswer,
+            correctAnswer: q.correctAnswer,
+            explanation:   q.explanation,
+          );
+        }
+        _pendingDraft = null;
+      }
+    });
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_secondsLeft > 0) {
@@ -109,6 +160,7 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
         explanation:   q.explanation,
       );
     });
+    _saveDraft();
   }
 
   void _submitTyped(AssessmentQuestion q, String text) {
@@ -123,6 +175,7 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
         explanation:   q.explanation,
       );
     });
+    _saveDraft();
   }
 
   void _submitAll(List<AssessmentQuestion> questions) {
@@ -146,6 +199,8 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
       explanations:   explanations,
       questions:      questions,
     );
+
+    _clearDraft();
 
     AssessmentService.saveAttempt(
       courseId:       widget.courseId,

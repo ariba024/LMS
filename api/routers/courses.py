@@ -536,6 +536,20 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
 
     effective_id = req.learner_id if current_user.role == "admin" else current_user.email
 
+    retakes = int(record.get("assessment_retakes") or 3)
+    if retakes > 0:
+        from sqlalchemy import func
+        with SessionLocal() as _db:
+            existing = _db.query(func.count(AssessmentAttemptRow.id)).filter(
+                AssessmentAttemptRow.learner_id == effective_id,
+                AssessmentAttemptRow.script_id == script_id,
+            ).scalar() or 0
+        if existing >= retakes:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Retake limit of {retakes} reached.",
+            )
+
     with SessionLocal() as db:
         row = AssessmentAttemptRow(
             id=str(uuid.uuid4()),
@@ -583,21 +597,23 @@ def get_assessment_attempts(script_id: str, learner_id: str | None = None, curre
     if not record:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
 
-    effective_id = learner_id if (learner_id and current_user.role == "admin") else current_user.email
+    admin_all = current_user.role == "admin" and not learner_id
+    effective_id = (
+        None if admin_all
+        else (learner_id if (learner_id and current_user.role == "admin") else current_user.email)
+    )
 
     with SessionLocal() as db:
-        rows = (
-            db.query(AssessmentAttemptRow)
-            .filter(
-                AssessmentAttemptRow.script_id == script_id,
-                AssessmentAttemptRow.learner_id == effective_id,
-            )
-            .order_by(desc(AssessmentAttemptRow.taken_at))
-            .all()
+        q = db.query(AssessmentAttemptRow).filter(
+            AssessmentAttemptRow.script_id == script_id,
         )
+        if effective_id:
+            q = q.filter(AssessmentAttemptRow.learner_id == effective_id)
+        rows = q.order_by(desc(AssessmentAttemptRow.taken_at)).all()
         attempts = [
             AssessmentAttemptItem(
                 id=r.id,
+                learner_id=r.learner_id if admin_all else None,
                 score=r.score,
                 correct=r.correct,
                 total=r.total,

@@ -11,12 +11,11 @@ GET    /api/v1/documents/{filename}/content      Read extracted chunks for a doc
 DELETE /api/v1/documents/{filename}              Remove a document from both vector stores
 """
 
-import asyncio
 import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, File
 
 from api.config import settings
 
@@ -70,9 +69,10 @@ def _build_content(filename: str, vector_store) -> DocumentContentResponse:
     )
 
 
-@router.post("/upload", response_model=UploadResponse,
-             responses={400: {"model": ErrorDetail}, 500: {"model": ErrorDetail}})
+@router.post("/upload", status_code=202,
+             responses={400: {"model": ErrorDetail}})
 async def upload_document(
+    background_tasks:   BackgroundTasks,
     file:               UploadFile = File(...),
     pipeline=Depends(get_pipeline),
     vector_store=Depends(get_vector_store),
@@ -82,11 +82,8 @@ async def upload_document(
     """
     Upload a PDF, DOCX, or PPTX file.
 
-    Processing runs **synchronously** — the response is returned only after
-    extraction, cleaning, chunking, embedding into both vector stores
-    (MiniLM + bge-m3), and BM25 index rebuild are all complete.
-    The response body includes the full extracted text and every chunk so you
-    can immediately verify what was captured.
+    Returns 202 immediately with a job_id. Ingestion (chunking, embedding,
+    BM25 index) runs in the background. Poll GET /jobs/{job_id} for status.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="File must have a name.")
@@ -98,31 +95,24 @@ async def upload_document(
             detail=f"Unsupported file type '{ext}'. Supported: {sorted(_SUPPORTED)}",
         )
 
-    safe_name = Path(file.filename).name  # strip any path components
+    safe_name = Path(file.filename).name
     dest = settings.upload_dir / safe_name
     raw  = await file.read()
+    if len(raw) > settings.max_upload_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum allowed size is {settings.max_upload_mb} MB.",
+        )
     dest.write_bytes(raw)
 
     job = job_store.create_upload(safe_name)
-    await asyncio.to_thread(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
-
-    if job.status == "failed":
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {job.error}")
-
-    doc = _build_content(safe_name, vector_store)
-
-    return UploadResponse(
-        job_id=job.job_id,
-        filename=safe_name,
-        status="completed",
-        message=f"'{safe_name}' ingested — {job.chunks_created} chunks stored.",
-        chunks_created=job.chunks_created,
-        document=doc,
-    )
+    background_tasks.add_task(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
+    return {"job_id": job.job_id, "filename": safe_name, "status": "processing"}
 
 
-@router.post("/batch-upload", response_model=BatchUploadResponse)
+@router.post("/batch-upload", status_code=202)
 async def batch_upload_documents(
+    background_tasks: BackgroundTasks,
     files:    Annotated[list[UploadFile], File(description="Select multiple PDF / DOCX / PPTX files")],
     pipeline=Depends(get_pipeline),
     vector_store=Depends(get_vector_store),
@@ -130,72 +120,43 @@ async def batch_upload_documents(
     _=Depends(require_admin),
 ):
     """
-    Upload and ingest multiple files (PDF, DOCX, PPTX) in one request.
+    Upload multiple files (PDF, DOCX, PPTX) in one request.
 
-    Files are processed **sequentially** — one fully completes before the next
-    starts. This keeps memory usage predictable and avoids loading multiple
-    ML models in parallel.
-
-    Each file in `results` shows status, chunks created, or an error message.
-    The overall response is returned only after ALL files finish.
-
-    Swagger: click 'Try it out', then click the 'Add item' button under
-    `files` to add more files before hitting Execute.
+    Returns 202 immediately with a list of job_ids. Each file is ingested in
+    the background. Poll GET /jobs/{job_id} for per-file status.
     """
-    results: list[BatchFileResult] = []
-    total_chunks = 0
+    submitted: list[dict] = []
+    rejected:  list[dict] = []
 
     for file in files:
         if not file.filename:
-            results.append(BatchFileResult(
-                filename="<unknown>", status="skipped",
-                error="File must have a name.",
-            ))
+            rejected.append({"filename": "<unknown>", "error": "File must have a name."})
             continue
 
         safe_name = Path(file.filename).name
         ext = Path(safe_name).suffix.lower()
         if ext not in _SUPPORTED:
-            results.append(BatchFileResult(
-                filename=safe_name,
-                status="skipped",
-                error=f"Unsupported type '{ext}'. Supported: {sorted(_SUPPORTED)}",
-            ))
+            rejected.append({
+                "filename": safe_name,
+                "error": f"Unsupported type '{ext}'. Supported: {sorted(_SUPPORTED)}",
+            })
+            continue
+
+        raw = await file.read()
+        if len(raw) > settings.max_upload_mb * 1024 * 1024:
+            rejected.append({
+                "filename": safe_name,
+                "error": f"File too large. Maximum is {settings.max_upload_mb} MB.",
+            })
             continue
 
         dest = settings.upload_dir / safe_name
-        raw  = await file.read()
         dest.write_bytes(raw)
-
         job = job_store.create_upload(safe_name)
-        await asyncio.to_thread(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
+        background_tasks.add_task(_sync_ingest, job, dest, pipeline, retrieval_pipeline)
+        submitted.append({"job_id": job.job_id, "filename": safe_name})
 
-        if job.status == "completed":
-            total_chunks += job.chunks_created or 0
-            results.append(BatchFileResult(
-                filename=safe_name,
-                status="completed",
-                chunks_created=job.chunks_created,
-            ))
-        else:
-            results.append(BatchFileResult(
-                filename=safe_name,
-                status="failed",
-                error=job.error,
-            ))
-
-    completed = sum(1 for r in results if r.status == "completed")
-    failed    = sum(1 for r in results if r.status == "failed")
-    skipped   = sum(1 for r in results if r.status == "skipped")
-
-    return BatchUploadResponse(
-        total_files=len(files),
-        completed=completed,
-        failed=failed,
-        skipped=skipped,
-        results=results,
-        total_chunks_stored=total_chunks,
-    )
+    return {"submitted": submitted, "rejected": rejected}
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatus,
@@ -298,12 +259,12 @@ def list_available_files(vector_store=Depends(get_vector_store), _=Depends(requi
     return {"files": files, "total": len(files)}
 
 
-@router.post("/ingest/{filename}", response_model=UploadResponse,
-             responses={404: {"model": ErrorDetail}, 400: {"model": ErrorDetail}, 500: {"model": ErrorDetail}})
+@router.post("/ingest/{filename}", status_code=202,
+             responses={404: {"model": ErrorDetail}, 400: {"model": ErrorDetail}})
 async def ingest_existing_file(
     filename:           str,
+    background_tasks:   BackgroundTasks,
     pipeline=Depends(get_pipeline),
-    vector_store=Depends(get_vector_store),
     retrieval_pipeline=Depends(get_retrieval_pipeline),
     _=Depends(require_admin),
 ):
@@ -311,7 +272,7 @@ async def ingest_existing_file(
     Ingest a file that already exists in the uploads/ directory.
 
     Use **GET /api/v1/documents/available** first to see which files are on disk.
-    This is the fast path — no re-uploading needed, just trigger processing.
+    Returns 202 immediately with a job_id. Poll GET /jobs/{job_id} for status.
 
     Safe to re-run: existing chunks are overwritten (upsert), not duplicated.
     """
@@ -333,21 +294,8 @@ async def ingest_existing_file(
         )
 
     job = job_store.create_upload(filename)
-    await asyncio.to_thread(_sync_ingest, job, file_path, pipeline, retrieval_pipeline)
-
-    if job.status == "failed":
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {job.error}")
-
-    doc = _build_content(filename, vector_store)
-
-    return UploadResponse(
-        job_id=job.job_id,
-        filename=filename,
-        status="completed",
-        message=f"'{filename}' ingested — {job.chunks_created} chunks stored.",
-        chunks_created=job.chunks_created,
-        document=doc,
-    )
+    background_tasks.add_task(_sync_ingest, job, file_path, pipeline, retrieval_pipeline)
+    return {"job_id": job.job_id, "filename": filename, "status": "processing"}
 
 
 @router.delete("/{filename}", response_model=DeleteResponse,

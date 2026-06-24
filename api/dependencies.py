@@ -265,7 +265,29 @@ class JobStore:
         return job
 
     def get_upload(self, job_id: str) -> _UploadJob | None:
-        return self._uploads.get(job_id.strip())
+        # Check local worker cache first (fast path for same-process polling)
+        job = self._uploads.get(job_id.strip())
+        if job is not None:
+            return job
+        # Fall back to DB — handles cross-worker reads in multi-worker deployments
+        try:
+            from api.db import SessionLocal
+            from api.models.jobs import UploadJobRow
+            with SessionLocal() as db:
+                row = db.get(UploadJobRow, job_id.strip())
+                if row is None:
+                    return None
+                return _UploadJob(
+                    job_id=row.job_id,
+                    filename=row.filename,
+                    status=row.status,
+                    error=row.error,
+                    chunks_created=row.chunks_created,
+                    started_at=row.started_at,
+                    finished_at=row.finished_at,
+                )
+        except Exception:
+            return None
 
     # -- Course jobs ------------------------------------------------------------
 
@@ -276,11 +298,55 @@ class JobStore:
         return job
 
     def get_course(self, job_id: str) -> _CourseJob | None:
-        return self._courses.get(job_id.strip())
+        # Check local worker cache first
+        job = self._courses.get(job_id.strip())
+        if job is not None:
+            return job
+        # Fall back to DB — handles cross-worker reads
+        try:
+            from api.db import SessionLocal
+            from api.models.jobs import CourseJobRow
+            with SessionLocal() as db:
+                row = db.get(CourseJobRow, job_id.strip())
+                if row is None:
+                    return None
+                return _CourseJob(
+                    job_id=row.job_id,
+                    source_file=row.source_file,
+                    status=row.status,
+                    error=row.error,
+                    course_script=json.loads(row.course_script_json) if row.course_script_json else None,
+                    started_at=row.started_at,
+                    total_lessons=row.total_lessons,
+                    completed_lessons=row.completed_lessons,
+                )
+        except Exception:
+            return None
 
     def list_course_jobs(self) -> list[_CourseJob]:
-        """Return all course jobs sorted newest-first (by started_at)."""
-        return sorted(self._courses.values(), key=lambda j: j.started_at, reverse=True)
+        """Return all course jobs sorted newest-first. Always reads from DB so all workers see all jobs."""
+        try:
+            from api.db import SessionLocal
+            from api.models.jobs import CourseJobRow
+            from sqlalchemy import desc as _desc
+            with SessionLocal() as db:
+                rows = db.query(CourseJobRow).order_by(_desc(CourseJobRow.started_at)).all()
+                return [
+                    _CourseJob(
+                        job_id=row.job_id,
+                        source_file=row.source_file,
+                        status=row.status,
+                        error=row.error,
+                        course_script=json.loads(row.course_script_json) if row.course_script_json else None,
+                        started_at=row.started_at,
+                        total_lessons=row.total_lessons,
+                        completed_lessons=row.completed_lessons,
+                    )
+                    for row in rows
+                ]
+        except Exception:
+            # Fallback to in-memory cache if DB is unavailable
+            return sorted(self._courses.values(), key=lambda j: j.started_at, reverse=True)
 
 
 # Global singleton

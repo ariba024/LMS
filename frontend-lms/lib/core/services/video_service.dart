@@ -105,4 +105,16 @@ class VideoService {
     final resp = await apiClient.get('/api/v1/video/renders/$renderId');
     return VideoRenderJob.fromJson(resp.data as Map<String, dynamic>);
   }
+
+  /// Pre-generate audio for every lesson in a course (fire-and-forget).
+  /// Sarvam TTS pre-warms all narrations so learners never wait for audio.
+  static Future<void> generateAudio(String scriptId) async {
+    await apiClient.post('/api/v1/audio/generate/$scriptId');
+  }
+
+  /// Delete a completed or failed render job (admin only).
+  /// Throws a DioException if the job is still active or not found.
+  static Future<void> deleteRender(String renderId) async {
+    await apiClient.delete('/api/v1/video/renders/$renderId');
+  }
 }

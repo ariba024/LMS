@@ -9,6 +9,7 @@ import '../../../core/widgets/button.dart';
 import '../../../core/widgets/chip_group.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
+import '../../../core/services/assessment_service.dart';
 import '../../../core/services/course_service.dart';
 import '../../../core/services/video_service.dart';
 import '../../../data/models/course.dart';
@@ -165,6 +166,15 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
         );
       }
     }
+  }
+
+  void _showResultsSheet(BuildContext ctx, Course course) {
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AssessmentResultsSheet(course: course),
+    );
   }
 
   @override
@@ -346,6 +356,7 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
                 onView: () => _view(ctx, filtered[i]),
                 onEdit: () => _showEditSheet(ctx, filtered[i]),
                 onGenerateVideo: () => _generateVideos(ctx, filtered[i]),
+                onResults: () => _showResultsSheet(ctx, filtered[i]),
                 onDelete: () => _confirmDelete(ctx, filtered[i]),
               ),
             ),
@@ -416,6 +427,7 @@ class _AdminCourseCard extends StatelessWidget {
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onGenerateVideo;
+  final VoidCallback onResults;
   final VoidCallback onDelete;
 
   const _AdminCourseCard({
@@ -425,6 +437,7 @@ class _AdminCourseCard extends StatelessWidget {
     required this.onView,
     required this.onEdit,
     required this.onGenerateVideo,
+    required this.onResults,
     required this.onDelete,
   });
 
@@ -506,6 +519,20 @@ class _AdminCourseCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: onResults,
+                      icon: const Icon(Icons.bar_chart_rounded,
+                          color: ArrestoColors.blue, size: 20),
+                      tooltip: 'Assessment results',
+                      style: IconButton.styleFrom(
+                        backgroundColor:
+                            ArrestoColors.blue.withValues(alpha: 0.08),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     IconButton(
                       onPressed: onDelete,
                       icon: const Icon(Icons.delete_outline_rounded,
@@ -1020,4 +1047,189 @@ class _GenerateVideoDialogState extends State<_GenerateVideoDialog> {
       ],
     );
   }
+}
+
+// ── Assessment Results bottom sheet ───────────────────────────────────────────
+
+class _AssessmentResultsSheet extends StatefulWidget {
+  final Course course;
+  const _AssessmentResultsSheet({required this.course});
+
+  @override
+  State<_AssessmentResultsSheet> createState() =>
+      _AssessmentResultsSheetState();
+}
+
+class _AssessmentResultsSheetState extends State<_AssessmentResultsSheet> {
+  List<AdminAssessmentResult>? _results;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await AssessmentService.getAdminAttempts(widget.course.id);
+      if (mounted) setState(() { _results = r; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = '$e'; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final passed = _results?.where((r) => r.passed).length ?? 0;
+    final failed = (_results?.length ?? 0) - passed;
+
+    return Container(
+      padding: EdgeInsets.only(
+        left: 24, right: 24, top: 24,
+        bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: ArrestoColors.bg2,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.bar_chart_rounded,
+                color: ArrestoColors.blue, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Assessment Results',
+                  style: ArrestoText.h3()),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ]),
+          Text(widget.course.title,
+              style: ArrestoText.small(color: ArrestoColors.textMuted)),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: ArrestoColors.orange),
+              ),
+            )
+          else if (_error != null)
+            Text('Could not load results: $_error',
+                style: ArrestoText.body(color: ArrestoColors.red))
+          else if (_results!.isEmpty)
+            const Text('No attempts yet for this course.')
+          else ...[
+            Row(children: [
+              _chip('$passed Passed', ArrestoColors.green),
+              const SizedBox(width: 8),
+              _chip('$failed Failed', ArrestoColors.red),
+              const SizedBox(width: 8),
+              _chip('${_results!.length} Total', ArrestoColors.ink),
+            ]),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _results!.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: ArrestoColors.line),
+                itemBuilder: (_, i) {
+                  final r = _results![i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: r.passed
+                              ? ArrestoColors.greenSoft
+                              : ArrestoColors.redSoft,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${r.score}%',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: r.passed
+                                ? ArrestoColors.green
+                                : ArrestoColors.red,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(r.learnerId,
+                                style: ArrestoText.bodyBold(),
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              '${r.correct}/${r.total} correct · ${r.formattedDate}',
+                              style: ArrestoText.xs(
+                                  color: ArrestoColors.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: r.passed
+                              ? ArrestoColors.greenSoft
+                              : ArrestoColors.redSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          r.passed ? 'Passed' : 'Failed',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: r.passed
+                                ? ArrestoColors.green
+                                : ArrestoColors.red,
+                          ),
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            )),
+      );
 }

@@ -3,6 +3,7 @@ api/routers/video.py
 
 POST   /api/v1/video/render                       Trigger video render for a lesson or slide item
 GET    /api/v1/video/renders/{render_id}           Poll render job status
+DELETE /api/v1/video/renders/{render_id}           Delete a completed or failed render job
 GET    /api/v1/video/renders/{render_id}/download  Stream the rendered MP4
 GET    /api/v1/video/scripts/{script_id}/renders   List all renders for a course script
 GET    /api/v1/video/languages                     Supported languages + TTS engine per lang
@@ -622,6 +623,17 @@ def list_script_renders(script_id: str, _=Depends(get_current_user)):
         "renders":   [_job_to_status(j) for j in jobs],
         "total":     len(jobs),
     }
+
+
+@router.delete("/renders/{render_id}", status_code=204)
+def delete_render(render_id: str, _=Depends(require_admin)):
+    """Delete a completed or failed render job. Active (pending/processing) jobs cannot be deleted."""
+    job = video_job_store.get(render_id)
+    if not job:
+        raise HTTPException(404, f"Render '{render_id}' not found.")
+    if job.status in ("pending", "processing"):
+        raise HTTPException(409, "Cannot delete an active render job — wait for it to complete or fail first.")
+    video_job_store.delete(render_id)
 
 
 @router.get("/heygen-credits")

@@ -488,6 +488,17 @@ def submit_hazard_attempt(
     return HazardAttemptResponse(xp_earned=xp, total_xp=xp_row.total_xp)
 
 
+# ── XP award helper (imported by progress.py) ─────────────────────────────────
+
+def award_lesson_xp(learner_id: str, course_id: str, xp: int, db: Session) -> None:
+    """Award XP earned from completing a lesson. Safe to call from any router."""
+    row = _get_or_create_xp(learner_id, course_id, db)
+    row.lesson_xp = (row.lesson_xp or 0) + xp
+    row.total_xp += xp
+    row.updated_at = _now()
+    db.commit()
+
+
 # ── Leaderboard ────────────────────────────────────────────────────────────────
 
 class LeaderboardEntry(BaseModel):
@@ -497,7 +508,45 @@ class LeaderboardEntry(BaseModel):
     total_xp: int
     daily_q_xp: int
     hazard_xp: int
+    lesson_xp: int
     daily_q_streak: int
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardEntry])
+def get_global_leaderboard(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return top learners ranked by total XP summed across all courses."""
+    rows = (
+        db.query(
+            LearnerXPRow.learner_id,
+            LearnerXPRow.display_name,
+            func.sum(LearnerXPRow.total_xp).label("total_xp"),
+            func.sum(LearnerXPRow.daily_q_xp).label("daily_q_xp"),
+            func.sum(LearnerXPRow.hazard_xp).label("hazard_xp"),
+            func.sum(LearnerXPRow.lesson_xp).label("lesson_xp"),
+            func.max(LearnerXPRow.daily_q_streak).label("daily_q_streak"),
+        )
+        .group_by(LearnerXPRow.learner_id, LearnerXPRow.display_name)
+        .order_by(func.sum(LearnerXPRow.total_xp).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        LeaderboardEntry(
+            rank=i + 1,
+            learner_id=r.learner_id,
+            display_name=r.display_name,
+            total_xp=r.total_xp or 0,
+            daily_q_xp=r.daily_q_xp or 0,
+            hazard_xp=r.hazard_xp or 0,
+            lesson_xp=r.lesson_xp or 0,
+            daily_q_streak=r.daily_q_streak or 0,
+        )
+        for i, r in enumerate(rows)
+    ]
 
 
 @router.get("/leaderboard/{course_id}", response_model=list[LeaderboardEntry])
@@ -523,6 +572,7 @@ def get_leaderboard(
             total_xp=r.total_xp,
             daily_q_xp=r.daily_q_xp,
             hazard_xp=r.hazard_xp,
+            lesson_xp=r.lesson_xp or 0,
             daily_q_streak=r.daily_q_streak,
         )
         for i, r in enumerate(rows)
@@ -538,6 +588,7 @@ class GamificationProfile(BaseModel):
     total_xp: int
     daily_q_xp: int
     hazard_xp: int
+    lesson_xp: int
     daily_q_streak: int
     rank: int | None
 
@@ -547,9 +598,12 @@ def get_gamification_profile(
     learner_id: str,
     course_id: str,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Return a learner's gamification stats for a course."""
+    if learner_id != current_user.email and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
+
     xp_id = f"{learner_id}:{course_id}"
     row = db.query(LearnerXPRow).filter(LearnerXPRow.id == xp_id).first()
 
@@ -561,11 +615,12 @@ def get_gamification_profile(
             total_xp=0,
             daily_q_xp=0,
             hazard_xp=0,
+            lesson_xp=0,
             daily_q_streak=0,
             rank=None,
         )
 
-    # Compute rank
+    # Compute rank within this course
     higher_count = (
         db.query(LearnerXPRow)
         .filter(
@@ -583,6 +638,7 @@ def get_gamification_profile(
         total_xp=row.total_xp,
         daily_q_xp=row.daily_q_xp,
         hazard_xp=row.hazard_xp,
+        lesson_xp=row.lesson_xp or 0,
         daily_q_streak=row.daily_q_streak,
         rank=rank,
     )

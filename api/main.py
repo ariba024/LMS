@@ -16,21 +16,21 @@ dependency injection (see dependencies.py).
 """
 
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
 
 from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
 from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
+from api.routers import attention_events as attention_events_router
 from api.routers import auth as auth_router
 from api.routers import tickets as tickets_router
 from api.routers import admin_users as admin_users_router
@@ -229,6 +229,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def _request_logging(request: Request, call_next):
+    """Log method, path, status, latency and a short request ID for every HTTP call."""
+    req_id = uuid.uuid4().hex[:12]
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    ms = round((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "%s %s → %d  %dms  rid=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        ms,
+        req_id,
+    )
+    response.headers["X-Request-ID"] = req_id
+    return response
+
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(courses.router)
@@ -245,6 +264,7 @@ app.include_router(learners.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(attention.router)
+app.include_router(attention_events_router.router)
 app.include_router(gamification.router)
 app.include_router(auth_router.router)
 app.include_router(tickets_router.router)
