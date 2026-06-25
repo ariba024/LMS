@@ -301,6 +301,13 @@ async def generate_all_videos(
     Style defaults to `modern` (free animated renderer).
     Pass style=animated_scene to use HeyGen (requires HEYGEN_API_KEY in .env).
     """
+    if style == "none":
+        raise HTTPException(
+            400,
+            "style='none' is not a valid render style. "
+            "Choose: modern, animated_scene, whiteboard_doodle, hybrid.",
+        )
+
     if style in _HEYGEN_STYLES and not settings.heygen_api_key:
         raise HTTPException(
             400,

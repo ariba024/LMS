@@ -102,7 +102,8 @@ class _CourseGeneratorWizardState
       setState(() { _published = true; _publishing = false; });
 
       // Queue video generation for all lessons (fire-and-forget)
-      if (_publishModeApi != 'draft') {
+      // Skipped when user chose 'No Video' — they can generate later from the course page.
+      if (_publishModeApi != 'draft' && _videoStyle != 'none') {
         final langCode = _langCode[_language] ?? 'en';
         VideoService.generateAll(_scriptId!, style: _videoStyle, lang: langCode, voice: _videoVoice)
             .then((count) {
@@ -1470,6 +1471,8 @@ class _StepStyleState extends State<_StepStyle> {
     ('AI Presenter', 'Free animated renderer · No API key required',
         CourseStyle.claude,     'modern'),
     ('Hybrid', 'Mix of animated and live action (HeyGen)', CourseStyle.hybrid, 'hybrid'),
+    ('No Video', 'Publish now — generate videos later from the course page',
+        CourseStyle.none,       'none'),
   ];
 
   @override
@@ -1571,7 +1574,32 @@ class _StepStyleState extends State<_StepStyle> {
             );
           },
         ),
-        if (_styles[_selected].$4 != 'modern') ...[
+        if (_styles[_selected].$4 == 'none') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBDBDBD)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF616161)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Course will be published without videos. '
+                    'To generate videos later, open the course from the Courses page.',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF616161), height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (_styles[_selected].$4 != 'modern') ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
