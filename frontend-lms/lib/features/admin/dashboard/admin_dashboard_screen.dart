@@ -345,6 +345,7 @@ class _CourseRow extends StatelessWidget {
                   CourseStyle.whiteboard => 'Whiteboard',
                   CourseStyle.claude     => 'AI Style',
                   CourseStyle.hybrid     => 'Hybrid',
+                  CourseStyle.none       => 'No Video',
                 },
                 style: ArrestoText.small(),
               ),
