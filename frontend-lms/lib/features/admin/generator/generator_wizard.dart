@@ -1468,13 +1468,14 @@ class _StepStyleState extends State<_StepStyle> {
 
   // (display label, description, CourseStyle, video style id)
   static const _styles = [
-    ('Animated Scene', 'Professional animated video with voiceover (HeyGen)',
+    ('Avatar Presenter', 'AI talking-head avatar with narration (HeyGen)',
+        CourseStyle.hybrid,     'hybrid'),
+    ('Animated Scene', 'Voice-over video with animated background (HeyGen)',
         CourseStyle.animated,   'animated_scene'),
-    ('Whiteboard Doodle', 'Hand-drawn whiteboard animation (HeyGen)',
+    ('Whiteboard', 'Hand-drawn whiteboard animation · Free',
         CourseStyle.whiteboard, 'whiteboard_doodle'),
-    ('AI Presenter', 'Free animated renderer · No API key required',
+    ('Animated Slides', 'Motion-graphics slide deck · Free',
         CourseStyle.claude,     'modern'),
-    ('Hybrid', 'Mix of animated and live action (HeyGen)', CourseStyle.hybrid, 'hybrid'),
     ('No Video', 'Publish now — generate videos later from the course page',
         CourseStyle.none,       'none'),
   ];
@@ -1603,7 +1604,8 @@ class _StepStyleState extends State<_StepStyle> {
               ],
             ),
           ),
-        ] else if (_styles[_selected].$4 != 'modern') ...[
+        ] else if (_styles[_selected].$4 == 'hybrid' ||
+                   _styles[_selected].$4 == 'animated_scene') ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -1621,8 +1623,7 @@ class _StepStyleState extends State<_StepStyle> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'HeyGen v3 subscription required — not available on this account. '
-                    'This course will render using AI Presenter style instead.',
+                    'Requires HEYGEN_API_KEY — set it in .env to enable this style.',
                     style: TextStyle(
                         fontSize: 12, color: Color(0xFF856404), height: 1.4),
                   ),
@@ -2020,16 +2021,16 @@ class _StepReviewState extends State<_StepReview> {
 
   static const _styleLabels = {
     'animated_scene':    'Animated Scene',
-    'whiteboard_doodle': 'Whiteboard Doodle',
-    'modern':            'AI Presenter',
-    'hybrid':            'Hybrid',
+    'whiteboard_doodle': 'Whiteboard',
+    'modern':            'Animated Slides',
+    'hybrid':            'Avatar Presenter',
   };
 
   static const _styleIcons = {
     'animated_scene':    Icons.animation_rounded,
     'whiteboard_doodle': Icons.draw_rounded,
-    'modern':            Icons.smart_display_rounded,
-    'hybrid':            Icons.auto_awesome_rounded,
+    'modern':            Icons.slideshow_rounded,
+    'hybrid':            Icons.record_voice_over_rounded,
   };
 
   static const _styleToThumb = {
