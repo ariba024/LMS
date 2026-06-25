@@ -137,7 +137,7 @@ class CourseLibrary:
                 return None
             # Read all attributes inside the session to avoid DetachedInstanceError.
             entry = self._row_to_index_entry(row)
-            entry["course_script"] = json.loads(row.course_script_json)
+            entry["course_script"] = json.loads(row.course_script_json) if row.course_script_json else {}
         return entry
 
     def update(

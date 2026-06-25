@@ -512,51 +512,53 @@ def _sync_generate_course(
             )
         job.course_script = script.to_dict()
 
+        import logging as _logging
+        import re as _re
+        _difficulty = ""
+        if instructions:
+            _m = _re.search(r"Difficulty level:\s*(\w+)", instructions, _re.IGNORECASE)
+            if _m:
+                _difficulty = _m.group(1).strip()
+
+        _lib_kwargs = dict(
+            script_id=job.job_id,
+            source_file=job.source_file,
+            course_title=script.course_title,
+            target_audience=target_audience,
+            course_script=job.course_script,
+            instructions=instructions,
+            use_knowledge_base=use_knowledge_base,
+            language=language,
+            difficulty=_difficulty,
+        )
+        _lib_saved = False
         try:
             from api.course_library import library as _lib
-            import re as _re
-            _difficulty = ""
-            if instructions:
-                _m = _re.search(r"Difficulty level:\s*(\w+)", instructions, _re.IGNORECASE)
-                if _m:
-                    _difficulty = _m.group(1).strip()
-            _lib.save(
-                script_id=job.job_id,
-                source_file=job.source_file,
-                course_title=script.course_title,
-                target_audience=target_audience,
-                course_script=job.course_script,
-                instructions=instructions,
-                use_knowledge_base=use_knowledge_base,
-                language=language,
-                difficulty=_difficulty,
-            )
+            _lib.save(**_lib_kwargs)
+            _lib_saved = True
         except Exception as _lib_exc:
-            import logging as _logging
             _logging.getLogger(__name__).error(
                 "course_library.save FAILED for job %s: %s", job.job_id, _lib_exc, exc_info=True,
             )
-            # Retry once — transient DB lock or session expiry
+            # Retry once after a short pause — handles transient SQLite locks
             try:
-                _lib.save(
-                    script_id=job.job_id,
-                    source_file=job.source_file,
-                    course_title=script.course_title,
-                    target_audience=target_audience,
-                    course_script=job.course_script,
-                    instructions=instructions,
-                    use_knowledge_base=use_knowledge_base,
-                    language=language,
-                    difficulty=_difficulty,
-                )
+                time.sleep(1)
+                _lib.save(**_lib_kwargs)
+                _lib_saved = True
             except Exception as _lib_exc2:
                 _logging.getLogger(__name__).error(
                     "course_library.save retry also FAILED for job %s: %s",
                     job.job_id, _lib_exc2, exc_info=True,
                 )
-                job.error = f"Script generated but library save failed: {_lib_exc2}"
+                job.error = (
+                    f"Course script was generated but could not be saved to the library "
+                    f"({_lib_exc2}). The script is still accessible via the job poll endpoint. "
+                    f"Please retry generation."
+                )
 
-        job.status = "completed"
+        # Only mark completed if the script reached the library — otherwise the
+        # publish step would fail with a silent 404 on the library lookup.
+        job.status = "completed" if _lib_saved else "failed"
         job_store._persist_course(job)
 
         try:

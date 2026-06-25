@@ -272,6 +272,7 @@ async def generate_course_from_blueprint(
     course_format:      str  = Form("custom", description="'custom' follows the blueprint exactly; 'standard' uses the auto-outline pipeline"),
     language:           str  = Form("English", description="Language for all course content"),
     duration_range:     str  = Form("60-90 minutes", description="Target duration: '30-45 minutes', '60-90 minutes', '2-3 hours', '3+ hours'"),
+    user_instructions:  str | None = Form(None, description="Additional structure/style instructions (e.g. '7 modules', 'conversational tone')"),
 ):
     """
     **Form-data alternative to POST /generate.**
@@ -298,7 +299,7 @@ async def generate_course_from_blueprint(
         course_title=course_title,
         target_audience=target_audience,
         instructions=instructions,
-        user_instructions=None,
+        user_instructions=user_instructions,
         use_knowledge_base=use_knowledge_base,
         course_format=course_format,
         language=language,
