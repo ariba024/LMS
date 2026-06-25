@@ -383,6 +383,7 @@ class _CourseGeneratorWizardState
           transcriptVoice: _transcriptVoice,
           videoVoice: _videoVoice,
           courseScript: _courseScript,
+          scriptId: _scriptId,
         ),
       7 => _StepAssessment(scriptId: _scriptId),
       8 => _StepPublish(
@@ -1100,6 +1101,10 @@ class _StepScriptState extends State<_StepScript> {
         durationRange: widget.courseLength,
       );
 
+      // Register the job ID immediately — before polling — so navigating away
+      // from this step doesn't lose the ID when the widget unmounts.
+      widget.onScriptId(jobId);
+
       // Poll until completed or failed
       while (mounted) {
         await Future.delayed(const Duration(seconds: 2));
@@ -1127,7 +1132,6 @@ class _StepScriptState extends State<_StepScript> {
             _courseScript = script;
           });
           if (script != null) widget.onComplete(script);
-          widget.onScriptId(jobId);
           break;
         } else if (raw == 'failed') {
           setState(() {
@@ -1991,6 +1995,7 @@ class _StepReview extends StatefulWidget {
   final String transcriptVoice;
   final String videoVoice;
   final Map<String, dynamic>? courseScript;
+  final String? scriptId;
 
   const _StepReview({
     required this.title,
@@ -2002,6 +2007,7 @@ class _StepReview extends StatefulWidget {
     required this.transcriptVoice,
     required this.videoVoice,
     this.courseScript,
+    this.scriptId,
   });
 
   @override
@@ -2099,10 +2105,13 @@ class _StepReviewState extends State<_StepReview> {
         // ── No-script warning ───────────────────────────────────────────────
         if (!hasScript) ...[
           _WarningBanner(
-            icon: Icons.warning_amber_rounded,
+            icon: widget.scriptId != null
+                ? Icons.hourglass_top_rounded
+                : Icons.warning_amber_rounded,
             color: const Color(0xFFF59E0B),
-            message:
-                'Script not generated yet — go back to Step 4 (Script) and generate the course script first.',
+            message: widget.scriptId != null
+                ? 'Script is still generating — check Step 4 for progress before publishing.'
+                : 'Script not generated yet — go back to Step 4 (Script) and generate the course script first.',
           ),
           const SizedBox(height: 16),
         ],

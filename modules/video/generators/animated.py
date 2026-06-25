@@ -257,10 +257,15 @@ def render_animated_html(
     scenes: list[dict],
     total_audio: float,
     style: str = "modern",
+    scene_durations: list[float] | None = None,
 ) -> str:
-    scene_dur_sum = sum(s["dur"] for s in scenes) or 1
-    scale = max(total_audio / scene_dur_sum, 0.5) if total_audio else 1.0
-    timed = [{"html": s["html"], "dur": s["dur"] * scale} for s in scenes]
+    if scene_durations and len(scene_durations) == len(scenes):
+        # Use actual per-scene TTS durations — no proportional scaling needed
+        timed = [{"html": s["html"], "dur": d} for s, d in zip(scenes, scene_durations)]
+    else:
+        scene_dur_sum = sum(s["dur"] for s in scenes) or 1
+        scale = max(total_audio / scene_dur_sum, 0.5) if total_audio else 1.0
+        timed = [{"html": s["html"], "dur": s["dur"] * scale} for s in scenes]
 
     scene_divs = "\n".join(
         f'<div class="scene-wrap" data-dur="{s["dur"]:.2f}">{s["html"]}</div>'
@@ -287,6 +292,6 @@ function show(idx) {{
   setTimeout(() => show(idx + 1), durs[idx] * 1000);
 }}
 window.__done = false;
-window.addEventListener('load', () => setTimeout(() => show(0), 250));
+window.addEventListener('load', () => show(0));
 </script>
 </body></html>"""

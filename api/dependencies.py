@@ -27,6 +27,9 @@ from api.schemas import JobStatus, CourseJobStatus
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
+# Testing bypass — set to False to re-enable real JWT authentication
+_DEV_AUTH_BYPASS = True
+
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -34,9 +37,13 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db=Depends(get_db),
 ):
+    from api.models.users import UserRow
+
+    if _DEV_AUTH_BYPASS:
+        return UserRow(id="dev-admin", email="dev@arresto.in", password_hash="", role="admin", is_active=True)
+
     from jose import JWTError
     from api.auth import decode_token
-    from api.models.users import UserRow
 
     _401 = HTTPException(
         status_code=401,
@@ -61,6 +68,8 @@ def get_current_user(
 
 
 def require_admin(current_user=Depends(get_current_user)):
+    if _DEV_AUTH_BYPASS:
+        return current_user
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
     return current_user

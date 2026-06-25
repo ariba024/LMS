@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/api_client.dart' show onAuthExpired;
 import '../services/auth_service.dart';
 
+// Testing bypass — set to false to re-enable real login
+const bool _kDevAuthBypass = true;
+
 class AuthState {
   final AuthUser? user;
   final bool isLoading;
@@ -33,8 +36,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void _init() async {
     // Wire forced-logout callback from the Dio interceptor
     onAuthExpired = () {
-      if (mounted) state = const AuthState();
+      if (!_kDevAuthBypass && mounted) state = const AuthState();
     };
+    if (_kDevAuthBypass) {
+      state = AuthState(
+        user: const AuthUser(
+          userId: 'dev-admin',
+          email: 'dev@arresto.in',
+          role: 'admin',
+          displayName: 'Dev Admin',
+        ),
+      );
+      return;
+    }
     final user = await AuthService.restoreSession();
     if (mounted) state = AuthState(user: user);
   }

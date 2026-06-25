@@ -15,10 +15,12 @@ into every Claude prompt, not buried in a generic "additional instructions" bloc
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import re
 import logging
+import threading
 
 logger = logging.getLogger("arresto.course_generator")
 
@@ -54,6 +56,7 @@ class LessonScript:
     key_takeaways:           list[str] = field(default_factory=list)
     real_world_examples:     list[dict] = field(default_factory=list)
     safety_scenarios:        list[dict] = field(default_factory=list)
+    assessment_questions:    list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -94,6 +97,7 @@ class CourseScript:
                 "key_takeaways":          l.key_takeaways,
                 "real_world_examples":    l.real_world_examples,
                 "safety_scenarios":       l.safety_scenarios,
+                "assessment_questions":   l.assessment_questions,
             }
 
         def module_d(m: ModuleScript) -> dict:
@@ -133,6 +137,31 @@ class CourseScript:
         logger.info("Course script saved -> %s", path)
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _wc(text: str) -> int:
+    return len(text.split())
+
+
+def _diverse_sample(content: str, max_chars: int = 6000) -> str:
+    """
+    Sample start, middle, and end of content so the analyse step sees a
+    representative cross-section of a long document rather than just the
+    first N characters (which may be a table of contents or introduction).
+    """
+    if len(content) <= max_chars:
+        return content
+    third = max_chars // 3
+    mid   = len(content) // 2
+    return (
+        content[:third]
+        + "\n\n[... middle of document ...]\n\n"
+        + content[mid - third // 2 : mid + third // 2]
+        + "\n\n[... end of document ...]\n\n"
+        + content[-third:]
+    )
+
+
 # ── Generator ──────────────────────────────────────────────────────────────────
 
 class CourseGenerator:
@@ -169,18 +198,18 @@ class CourseGenerator:
         These are HARD limits — enforced programmatically after outline generation.
         """
         d = duration_range.lower()
-        if "15" in d or "20" in d:
+        if "15" in d or ("20" in d and "hour" not in d):
             # 15-20 min total → 1 module, 2 lessons, 5-8 min/lesson
             return 20, 1, 2, 5, 8
         elif "30" in d or "45" in d:
             # 30-45 min total → 2 modules, 3 lessons each, 5-8 min/lesson
             return 45, 2, 3, 5, 8
+        elif "2" in d and "hour" in d:
+            # 2-3 hours — checked BEFORE 3+ hours (both contain "3" and "hour")
+            return 180, 4, 5, 10, 15
         elif "3" in d and ("hour" in d or "+" in d):
             # 3+ hours → 5 modules, 6 lessons each, 12-18 min/lesson
             return 240, 5, 6, 12, 18
-        elif "2" in d and "hour" in d:
-            # 2-3 hours → 4 modules, 5 lessons each, 10-15 min/lesson
-            return 180, 4, 5, 10, 15
         else:
             # 60-90 min (default) → 3 modules, 4 lessons each, 7-10 min/lesson
             return 90, 3, 4, 7, 10
@@ -189,7 +218,7 @@ class CourseGenerator:
     def _duration_prompt_rules(duration_range: str) -> str:
         """Returns the duration constraints as a formatted string for Claude prompts."""
         d = duration_range.lower()
-        if "15" in d or "20" in d:
+        if "15" in d or ("20" in d and "hour" not in d):
             return (
                 "TOTAL DURATION: 15 to 20 minutes maximum\n"
                 "  - 1 module only\n"
@@ -203,19 +232,20 @@ class CourseGenerator:
                 "  - 2 to 3 lessons per module\n"
                 "  - 5 to 8 minutes per lesson (duration_minutes between 5 and 8)"
             )
+        elif "2" in d and "hour" in d:
+            # checked BEFORE 3+ hours (both "2-3 hours" and "3+ hours" contain "3" and "hour")
+            return (
+                "TOTAL DURATION: 2 to 3 hours\n"
+                "  - 3 to 4 modules\n"
+                "  - 4 to 5 lessons per module\n"
+                "  - 10 to 15 minutes per lesson (duration_minutes between 10 and 15)"
+            )
         elif "3" in d and ("hour" in d or "+" in d):
             return (
                 "TOTAL DURATION: 3 or more hours\n"
                 "  - 4 to 5 modules\n"
                 "  - 4 to 6 lessons per module\n"
                 "  - 12 to 18 minutes per lesson (duration_minutes between 12 and 18)"
-            )
-        elif "2" in d and "hour" in d:
-            return (
-                "TOTAL DURATION: 2 to 3 hours\n"
-                "  - 3 to 4 modules\n"
-                "  - 4 to 5 lessons per module\n"
-                "  - 10 to 15 minutes per lesson (duration_minutes between 10 and 15)"
             )
         else:
             return (
@@ -240,6 +270,26 @@ class CourseGenerator:
         les_count = int(les_m.group(1)) if les_m else None
         return mod_count, les_count
 
+    @staticmethod
+    def _parse_duration_override(user_instructions: str | None) -> int | None:
+        """
+        Extract a total-course duration from free-form instructions.
+        Returns total_minutes or None if not found.
+        Matches: "20 minutes", "30 min", "1 hour", "1.5 hours"
+        Ignores per-lesson qualifiers like "5 min per lesson".
+        """
+        if not user_instructions:
+            return None
+        # Strip per-lesson duration hints so they don't fool the parser
+        text = re.sub(r'\d+\s*min(?:utes?)?\s*(?:per\s+lesson|/lesson)', '', user_instructions, flags=re.IGNORECASE)
+        m = re.search(r'\b(\d+)\s*(?:minute|min)\b', text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        m = re.search(r'\b(\d+(?:\.\d+)?)\s*hour', text, re.IGNORECASE)
+        if m:
+            return int(float(m.group(1)) * 60)
+        return None
+
     def _enforce_duration(
         self,
         outline: dict,
@@ -249,21 +299,39 @@ class CourseGenerator:
         """
         Clamps the outline to the selected duration band.
 
-        If the admin explicitly specified a module or lesson count in
-        user_instructions, those override the duration-band defaults —
-        the admin's structural intent takes priority. Per-lesson duration
-        limits are always enforced to keep individual lessons sane.
+        max_total is a HARD ceiling and is never inflated.
+        If the admin specifies a module count in user_instructions, max_lessons_per_module
+        is reduced so the total still fits inside max_total.
+        If the admin specifies a duration in user_instructions that is stricter than the
+        selected band, the tighter value wins.
         """
         max_total, max_mods, max_les, min_les_min, max_les_min = self._duration_limits(duration_range)
 
-        # Admin-specified structure overrides duration-band caps
+        # Tighten constraints if user typed a duration in free-text instructions
+        parsed_mins = self._parse_duration_override(user_instructions)
+        if parsed_mins is not None and parsed_mins < max_total:
+            logger.info(
+                "User instructions specify %d min — tightening band ceiling from %d min.",
+                parsed_mins, max_total,
+            )
+            _, tight_mods, tight_les, tight_min_les, tight_max_les = self._duration_limits(
+                f"{parsed_mins} minutes"
+            )
+            max_total   = parsed_mins
+            max_mods    = min(max_mods,   tight_mods)
+            max_les     = min(max_les,    tight_les)
+            min_les_min = max(min_les_min, tight_min_les)
+            max_les_min = min(max_les_min, tight_max_les)
+
+        # Admin-specified module/lesson counts adjust structure, not the total ceiling
         user_mod_count, user_les_count = self._parse_structure_overrides(user_instructions)
         if user_mod_count is not None:
-            logger.info("User specified %d modules — overriding duration-band cap of %d.", user_mod_count, max_mods)
+            logger.info("User specified %d modules — overriding band default of %d.", user_mod_count, max_mods)
             max_mods = user_mod_count
-            max_total = max_total * max_mods // max(1, self._duration_limits(duration_range)[1])
+            # Reduce lessons-per-module so the total still fits: floor( max_total / (mods × min_les_min) )
+            max_les = min(max_les, max(1, max_total // (max_mods * min_les_min)))
         if user_les_count is not None:
-            logger.info("User specified %d lessons/module — overriding duration-band cap of %d.", user_les_count, max_les)
+            logger.info("User specified %d lessons/module — overriding band default of %d.", user_les_count, max_les)
             max_les = user_les_count
 
         outline["modules"] = outline["modules"][:max_mods]
@@ -283,7 +351,8 @@ class CourseGenerator:
             scale = max_total / total
             for mod in outline["modules"]:
                 for les in mod["lessons"]:
-                    les["duration_minutes"] = max(min_les_min, int(les["duration_minutes"] * scale))
+                    # Use a lower floor during scale-down to avoid blocking the ceiling
+                    les["duration_minutes"] = max(1, int(les["duration_minutes"] * scale))
 
         final_total = sum(les["duration_minutes"] for mod in outline["modules"] for les in mod["lessons"])
         final_lessons = sum(len(mod["lessons"]) for mod in outline["modules"])
@@ -447,6 +516,134 @@ class CourseGenerator:
             for h in hits
         )
 
+    # ── Narration word-count top-up ─────────────────────────────────────────────
+
+    def _extend_narration(
+        self,
+        lesson_title: str,
+        current: str,
+        min_words: int,
+        language: str,
+    ) -> str:
+        """Extend a narration that fell below the word-count floor."""
+        current_wc = _wc(current)
+        needed = min_words - current_wc
+        logger.info(
+            "  Narration too short (%d words, need %d) — extending by ~%d words ...",
+            current_wc, min_words, needed,
+        )
+        prompt = (
+            f'The narration for "{lesson_title}" is {current_wc} words '
+            f"but requires at least {min_words}.\n"
+            f"You must add approximately {needed} more words.\n\n"
+            f"EXISTING NARRATION:\n{current}\n\n"
+            f"Continue from where it left off — write in {language}, "
+            f"teacher-voice, first-person plural. "
+            f"Add deeper explanations, transitions, relatable examples, and a recap. "
+            f"Output ONLY the extension text (do NOT repeat the existing narration)."
+        )
+        extension = self._call(prompt, max_tokens=8000)
+        return current.rstrip() + "\n\n" + extension.strip()
+
+    # ── Language heuristic check ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _tts_wpm(language: str) -> int:
+        """
+        Estimated words-per-minute for the TTS engine used for `language`.
+
+        Indian language scripts (Devanagari, Dravidian) have longer phonetics
+        per word — Sarvam Bulbul-v3 produces ~100 wpm for those.
+        English and European edge-tts voices run at ~165 wpm.
+        """
+        indian = {
+            "hindi", "tamil", "telugu", "bengali", "gujarati",
+            "kannada", "malayalam", "marathi", "punjabi", "odia",
+        }
+        return 100 if language.lower() in indian else 165
+
+    @staticmethod
+    def _check_language(text: str, language: str) -> bool:
+        """
+        For non-English targets: flag if >30 % of words are purely ASCII
+        (a reliable signal of language slippage in multilingual generation).
+        Returns True when the text looks correct, False when suspect.
+        """
+        if language.lower() in ("english", "en"):
+            return True
+        words = text.split()
+        if not words:
+            return True
+        ascii_count = sum(1 for w in words if all(ord(c) < 128 for c in w))
+        return (ascii_count / len(words)) < 0.30
+
+    # ── Topic coverage check ─────────────────────────────────────────────────────
+
+    def _topic_coverage_check(self, main_topics: list[str], outline: dict) -> None:
+        """
+        Compare main_topics from the analyse step against lesson topic_focus fields.
+        Logs a warning for any topic not represented in any lesson.
+        Pure Python — no Claude call.
+        """
+        lesson_corpus = " ".join(
+            (les.get("topic_focus", "") + " " + les.get("lesson_title", "")).lower()
+            for mod in outline.get("modules", [])
+            for les in mod.get("lessons", [])
+        )
+        dropped = [t for t in main_topics if t.lower() not in lesson_corpus]
+        if dropped:
+            logger.warning(
+                "Topic coverage gap — %d topic(s) from analysis have no lesson: %s",
+                len(dropped), dropped,
+            )
+        else:
+            logger.info(
+                "Topic coverage OK — all %d main topics are represented.", len(main_topics)
+            )
+
+    # ── Coherence review ─────────────────────────────────────────────────────────
+
+    def _coherence_review(self, modules: list, language: str) -> list[str]:
+        """
+        Lightweight post-generation review: asks Claude to spot duplicate key terms,
+        contradictory objectives, or missing progressions across the full script.
+        Returns a list of issue strings; empty list means all good.
+        Non-blocking — exceptions are caught and logged.
+        """
+        entries = [
+            f"Lesson: {les.lesson_title}\n"
+            f"Objectives: {les.learning_objectives}\n"
+            f"Key terms: {les.key_terms}\n"
+            f"Summary: {les.summary}"
+            for mod in modules
+            for les in mod.lessons
+        ]
+        if not entries:
+            return []
+        prompt = (
+            "Review the following course script outline for quality issues.\n\n"
+            + "\n\n---\n\n".join(entries)
+            + '\n\nReturn JSON: {"issues": ["issue 1", ...]}\n\n'
+            "Look for: duplicate key terms across lessons, contradictory objectives, "
+            "lessons that don't logically progress, objectives that don't match the "
+            "lesson title. Return an empty list if the script looks coherent. "
+            "Return ONLY the JSON."
+        )
+        try:
+            raw    = self._call(prompt, max_tokens=1024)
+            data   = self._parse_json(raw)
+            issues = data.get("issues", [])
+            if issues:
+                logger.warning(
+                    "Coherence review found %d issue(s): %s", len(issues), issues
+                )
+            else:
+                logger.info("Coherence review passed — no issues found.")
+            return issues
+        except Exception as exc:
+            logger.warning("Coherence review failed (non-blocking): %s", exc)
+            return []
+
     # ── Public API ──────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -527,14 +724,20 @@ class CourseGenerator:
         # Clamp outline — user_instructions can override module/lesson counts
         outline = self._enforce_duration(outline, duration_range, user_instructions)
 
+        # Warn if any main topic from analysis is absent from the outline
+        self._topic_coverage_check(analysis.get("main_topics", []), outline)
+
         total_lessons = sum(len(m["lessons"]) for m in outline["modules"])
         logger.info("Step 3/3: Scripting %d lessons ...", total_lessons)
 
-        # Step 3 — script each lesson
+        # Step 3 — script each lesson (modules parallelised, lessons sequential within module)
         modules = self._script_all(
             outline, full_content, target_audience, source_file,
             progress_callback, parsed, use_knowledge_base, language, user_req,
         )
+
+        # Post-generation coherence check (non-blocking — logs issues, doesn't fail)
+        self._coherence_review(modules, language)
 
         total_mins = sum(l.duration_minutes for m in modules for l in m.lessons)
         return CourseScript(
@@ -573,7 +776,7 @@ TARGET AUDIENCE: {audience}
 {user_req}═════════════════════════════════════════════════════════════════
 
 DOCUMENT CONTENT:
-{content[:6000]}
+{_diverse_sample(content, 6000)}
 
 Return a JSON object — write ALL text values in {language}:
 {{
@@ -688,19 +891,24 @@ Return ONLY the JSON.
         user_req:           str = "",
     ) -> list[ModuleScript]:
         parsed = parsed or {}
-        total = sum(len(m["lessons"]) for m in outline["modules"])
-        done  = 0
-        modules_out: list[ModuleScript] = []
+        total        = sum(len(m["lessons"]) for m in outline["modules"])
+        lock         = threading.Lock()
+        done_counter = [0]
 
-        for mod in outline["modules"]:
+        def _process_module(mod: dict) -> ModuleScript:
             lessons_out: list[LessonScript] = []
+            prev_summary: str | None = None
+
             for les in mod["lessons"]:
+                min_words = les["duration_minutes"] * self._tts_wpm(language)
                 last_exc: Exception | None = None
+
                 for attempt in range(2):
                     try:
                         ls = self._script_lesson(
                             les, mod, content, audience, source_file,
                             parsed, use_knowledge_base, language, user_req,
+                            previous_lesson_summary=prev_summary,
                         )
                         last_exc = None
                         break
@@ -712,32 +920,68 @@ Return ONLY the JSON.
                         )
                 if last_exc is not None:
                     raise last_exc
-                lessons_out.append(ls)
-                done += 1
-                if progress_callback:
-                    progress_callback(done, total)
-                logger.info("  [ok] (%d/%d) %s > %s", done, total, mod["module_title"], les["lesson_title"])
 
-            modules_out.append(ModuleScript(
+                # Word-count floor: extend narration if it fell short
+                if _wc(ls.narration_script) < min_words:
+                    ls.narration_script = self._extend_narration(
+                        ls.lesson_title, ls.narration_script, min_words, language,
+                    )
+
+                # Language heuristic: warn if >30 % ASCII words in a non-English lesson
+                if not self._check_language(ls.narration_script, language):
+                    logger.warning(
+                        "  Language suspect in '%s' (expected %s, >30%% ASCII words detected)",
+                        ls.lesson_title, language,
+                    )
+
+                # Pass this lesson's summary to the next lesson for continuity
+                prev_summary = ls.summary or ls.lesson_title
+
+                lessons_out.append(ls)
+                with lock:
+                    done_counter[0] += 1
+                    current = done_counter[0]
+                    if progress_callback:
+                        progress_callback(current, total)
+                logger.info(
+                    "  [ok] (%d/%d) %s > %s",
+                    done_counter[0], total, mod["module_title"], les["lesson_title"],
+                )
+
+            return ModuleScript(
                 module_number=mod["module_number"],
                 module_title=mod["module_title"],
                 module_description=mod["module_description"],
                 lessons=lessons_out,
-            ))
+            )
 
-        return modules_out
+        modules = outline["modules"]
+        # Modules are independent — run them in parallel.
+        # Lessons within each module stay sequential to preserve prev_summary continuity.
+        max_workers = min(4, len(modules))
+        if max_workers <= 1:
+            return [_process_module(m) for m in modules]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_process_module, m): m["module_number"] for m in modules}
+            results: dict[int, ModuleScript] = {}
+            for fut in concurrent.futures.as_completed(futures):
+                results[futures[fut]] = fut.result()
+
+        return [results[m["module_number"]] for m in modules]
 
     def _script_lesson(
         self,
-        lesson:             dict,
-        module:             dict,
-        content:            str,
-        audience:           str,
-        source_file:        str,
-        parsed:             dict | None = None,
-        use_knowledge_base: bool = False,
-        language:           str = "English",
-        user_req:           str = "",
+        lesson:                  dict,
+        module:                  dict,
+        content:                 str,
+        audience:                str,
+        source_file:             str,
+        parsed:                  dict | None = None,
+        use_knowledge_base:      bool = False,
+        language:                str = "English",
+        user_req:                str = "",
+        previous_lesson_summary: str | None = None,
     ) -> LessonScript:
         parsed = parsed or {}
         context = self._get_lesson_context(
@@ -745,27 +989,39 @@ Return ONLY the JSON.
             use_knowledge_base=use_knowledge_base,
         )
 
-        difficulty_line  = f"DIFFICULTY: {parsed['difficulty']}" if parsed.get("difficulty") else ""
-        objectives_line  = f"LEARNING OBJECTIVES TO HIT: {parsed['objectives']}" if parsed.get("objectives") else ""
-        depth_line       = f"DEPTH: {parsed['depth']}" if parsed.get("depth") else ""
-        tone_line        = f"TONE: {parsed['tone']} — maintain this tone throughout the narration." if parsed.get("tone") else ""
-        # TTS engines read at ~150-160 wpm; LLMs typically write 70-80% of a soft
-        # target, so we set a hard minimum of duration × 160 to reliably reach the
-        # requested lesson length after TTS conversion.
-        target_words     = lesson["duration_minutes"] * 160
-        min_words        = lesson["duration_minutes"] * 130  # absolute floor
+        difficulty_line = f"DIFFICULTY: {parsed['difficulty']}" if parsed.get("difficulty") else ""
+        objectives_line = f"LEARNING OBJECTIVES TO HIT: {parsed['objectives']}" if parsed.get("objectives") else ""
+        depth_line      = f"DEPTH: {parsed['depth']}" if parsed.get("depth") else ""
+        tone_line       = (
+            f"TONE: {parsed['tone']} — maintain this tone throughout the narration."
+            if parsed.get("tone") else ""
+        )
+        prev_lesson_line = (
+            f"PREVIOUS LESSON SUMMARY: {previous_lesson_summary}\n"
+            "  → Open with a brief transition from the previous lesson. "
+            "Do NOT repeat its content."
+            if previous_lesson_summary else ""
+        )
+        # Floor = exact TTS speed so even the shortest acceptable narration
+        # produces a video that matches the planned duration.
+        # Target = 15 % above TTS speed to push the LLM past the floor.
+        tts_wpm      = self._tts_wpm(language)
+        min_words    = lesson["duration_minutes"] * tts_wpm
+        target_words = lesson["duration_minutes"] * int(tts_wpm * 1.15)
 
         prompt = f"""Script ONE lesson for an educational course.
 
 ═══ FIXED CONSTRAINTS — FOLLOW EXACTLY ═════════════════════════
 OUTPUT LANGUAGE: {language}
   → Write ALL content (narration, bullets, objectives, terms,
-    examples, takeaways) in {language}. NO English unless language IS English.
+    examples, takeaways, questions) in {language}.
+    NO English unless language IS English.
 
 {difficulty_line}
 {objectives_line}
 {depth_line}
 {tone_line}
+{prev_lesson_line}
 {user_req}═════════════════════════════════════════════════════════════════
 
 MODULE:      {module['module_title']}
@@ -794,8 +1050,13 @@ WRITING RULES:
 7. summary — 1-2 sentence overview.
 8. simplified_explanation — Core concept in plain language (2-3 sentences).
 9. key_takeaways — 3-4 actionable points the learner should remember.
-10. real_world_examples — 2-3 examples each with situation and correct_action.
-11. safety_scenarios — 2-3 safety-relevant scenarios (empty list [] if not applicable).
+10. real_world_examples — 2-3 examples GROUNDED IN THE SOURCE CONTENT above.
+    Each must cite a specific situation described in the document, not an invented one.
+    Use exact terminology from the source content.
+11. safety_scenarios — 2-3 safety-relevant scenarios drawn from source content
+    (empty list [] if not applicable).
+12. assessment_questions — 3 multiple-choice questions testing this lesson's key concepts.
+    Each question must have 4 options (A-D) with exactly one correct answer and a brief explanation.
 
 Return a JSON object — ALL text in {language}:
 {{
@@ -812,10 +1073,18 @@ Return a JSON object — ALL text in {language}:
   "simplified_explanation": "Plain-language explanation in {language}.",
   "key_takeaways": ["takeaway 1", "takeaway 2", "takeaway 3"],
   "real_world_examples": [
-    {{"situation": "...", "correct_action": "..."}}
+    {{"situation": "exact situation from source document", "correct_action": "..."}}
   ],
   "safety_scenarios": [
     {{"situation": "...", "correct_action": "..."}}
+  ],
+  "assessment_questions": [
+    {{
+      "question": "...",
+      "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+      "correct": "B",
+      "explanation": "..."
+    }}
   ]
 }}
 
@@ -843,6 +1112,7 @@ Return ONLY the JSON.
             key_takeaways=data.get("key_takeaways", []),
             real_world_examples=data.get("real_world_examples", []),
             safety_scenarios=data.get("safety_scenarios", []),
+            assessment_questions=data.get("assessment_questions", []),
         )
 
     # ── Micro-course (single-pass custom blueprint) ─────────────────────────────
