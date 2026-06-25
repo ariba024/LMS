@@ -12,10 +12,12 @@ DELETE /api/v1/documents/{filename}              Remove a document from both vec
 """
 
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse
 
 from api.config import settings
 
@@ -235,6 +237,23 @@ def get_document_content(filename: str, vector_store=Depends(get_vector_store), 
         total_chunks=len(chunk_details),
         full_text=full_text,
         chunks=chunk_details,
+    )
+
+
+@router.get("/{filename}/file")
+def download_document_file(filename: str, _=Depends(require_admin)):
+    """Serve the original uploaded file from the uploads/ directory."""
+    file_path = settings.upload_dir / Path(filename).name
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{filename}' not found in uploads/. The file may have been deleted.",
+        )
+    media_type, _ = mimetypes.guess_type(filename)
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type=media_type or "application/octet-stream",
     )
 
 

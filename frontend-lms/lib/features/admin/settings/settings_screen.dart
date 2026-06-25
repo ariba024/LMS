@@ -630,45 +630,7 @@ class _KnowledgeBaseSettingsState
                             '${docs.fold(0, (s, d) => s + d.chunkCount)} total chunks',
                             style: ArrestoText.small()),
                       ),
-                      ...docs.map((doc) => Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: ArrestoColors.surfaceSoft,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: ArrestoColors.line),
-                            ),
-                            child: Row(children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: ArrestoColors.redSoft,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(doc.ext,
-                                    style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: ArrestoColors.red)),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(doc.displayName,
-                                        style: ArrestoText.bodyBold(),
-                                        overflow: TextOverflow.ellipsis),
-                                    Text('${doc.chunkCount} chunks',
-                                        style: ArrestoText.xs()),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.check_circle_rounded,
-                                  color: ArrestoColors.green, size: 16),
-                            ]),
-                          )),
+                      ...docs.map((doc) => _DocumentRow(doc: doc)),
                     ],
                   );
                 },
@@ -746,6 +708,214 @@ class _JobRow extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ── Document Row ──────────────────────────────────────────────────────────────
+
+class _DocumentRow extends StatefulWidget {
+  final DocumentInfo doc;
+  const _DocumentRow({required this.doc});
+
+  @override
+  State<_DocumentRow> createState() => _DocumentRowState();
+}
+
+class _DocumentRowState extends State<_DocumentRow> {
+  bool _openingFile = false;
+
+  void _viewText() {
+    showDialog(
+      context: context,
+      builder: (_) => _TextViewerDialog(doc: widget.doc),
+    );
+  }
+
+  Future<void> _openFile() async {
+    setState(() => _openingFile = true);
+    try {
+      final result = await DocumentService.getFileBytes(widget.doc.sourceFile);
+      final blob = html.Blob([result.bytes], result.mimeType);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.window.open(url, '_blank');
+      Future.delayed(
+        const Duration(seconds: 60),
+        () => html.Url.revokeObjectUrl(url),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open file: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingFile = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: ArrestoColors.line),
+      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: ArrestoColors.redSoft,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            widget.doc.ext,
+            style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: ArrestoColors.red),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.doc.displayName,
+                  style: ArrestoText.bodyBold(),
+                  overflow: TextOverflow.ellipsis),
+              Text('${widget.doc.chunkCount} chunks',
+                  style: ArrestoText.xs()),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.article_rounded, size: 18),
+          color: ArrestoColors.textMuted,
+          tooltip: 'View extracted text',
+          onPressed: _viewText,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        if (_openingFile)
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.orange, strokeWidth: 2),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            color: ArrestoColors.textMuted,
+            tooltip: 'Open original file',
+            onPressed: _openFile,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+      ]),
+    );
+  }
+}
+
+// ── Text Viewer Dialog ────────────────────────────────────────────────────────
+
+class _TextViewerDialog extends StatefulWidget {
+  final DocumentInfo doc;
+  const _TextViewerDialog({required this.doc});
+
+  @override
+  State<_TextViewerDialog> createState() => _TextViewerDialogState();
+}
+
+class _TextViewerDialogState extends State<_TextViewerDialog> {
+  DocumentContent? _content;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final content =
+          await DocumentService.getDocumentContent(widget.doc.sourceFile);
+      if (mounted) setState(() => _content = content);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: ArrestoColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 620),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 12, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.doc.displayName,
+                          style: ArrestoText.h4(),
+                          overflow: TextOverflow.ellipsis),
+                      if (_content != null)
+                        Text(
+                          '${_content!.totalChunks} chunks · '
+                          '${_content!.assetType.toUpperCase()}',
+                          style: ArrestoText.small(),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: ArrestoColors.line),
+            Expanded(
+              child: _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text('Failed to load: $_error',
+                            style: ArrestoText.small(
+                                color: ArrestoColors.red),
+                            textAlign: TextAlign.center),
+                      ),
+                    )
+                  : _content == null
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: ArrestoColors.orange),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: SelectableText(
+                            _content!.fullText,
+                            style: ArrestoText.mono()
+                                .copyWith(fontSize: 13, height: 1.65),
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

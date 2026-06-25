@@ -145,13 +145,42 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
 
 // ── Row widget ────────────────────────────────────────────────────────────────
 
-class _ResourceRow extends StatelessWidget {
+class _ResourceRow extends StatefulWidget {
   final DocumentInfo doc;
   const _ResourceRow({required this.doc});
 
   @override
+  State<_ResourceRow> createState() => _ResourceRowState();
+}
+
+class _ResourceRowState extends State<_ResourceRow> {
+  bool _downloading = false;
+
+  Future<void> _download() async {
+    setState(() => _downloading = true);
+    try {
+      final result = await DocumentService.getFileBytes(widget.doc.sourceFile);
+      final blob = html.Blob([result.bytes], result.mimeType);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.window.open(url, '_blank');
+      Future.delayed(
+        const Duration(seconds: 60),
+        () => html.Url.revokeObjectUrl(url),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ext = doc.ext;
+    final ext = widget.doc.ext;
     final Color iconColor;
     final Color iconBg;
 
@@ -177,47 +206,51 @@ class _ResourceRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10)),
-          child: Icon(Icons.description_rounded,
-              size: 22, color: iconColor),
+              color: iconBg, borderRadius: BorderRadius.circular(10)),
+          child: Icon(Icons.description_rounded, size: 22, color: iconColor),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Text(doc.displayName, style: ArrestoText.bodyBold(),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 2),
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                    color: iconBg,
-                    borderRadius: BorderRadius.circular(4)),
-                child: Text(ext,
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: iconColor)),
-              ),
-              const SizedBox(width: 6),
-              Text('${doc.chunkCount} chunks',
-                  style: ArrestoText.xs()),
-            ]),
-          ]),
+                Text(widget.doc.displayName,
+                    style: ArrestoText.bodyBold(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(4)),
+                    child: Text(ext,
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: iconColor)),
+                  ),
+                  const SizedBox(width: 6),
+                  Text('${widget.doc.chunkCount} chunks',
+                      style: ArrestoText.xs()),
+                ]),
+              ]),
         ),
-        IconButton(
-          tooltip: 'Download',
-          icon: Icon(Icons.download_rounded,
-              color: iconColor, size: 20),
-          onPressed: () {
-            final url = DocumentService.downloadUrl(doc.sourceFile);
-            html.window.open(url, '_blank');
-          },
-        ),
+        if (_downloading)
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+                color: iconColor, strokeWidth: 2),
+          )
+        else
+          IconButton(
+            tooltip: 'Download',
+            icon: Icon(Icons.download_rounded, color: iconColor, size: 20),
+            onPressed: _download,
+          ),
       ]),
     );
   }

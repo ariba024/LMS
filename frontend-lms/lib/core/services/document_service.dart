@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'api_client.dart';
 
@@ -63,6 +64,59 @@ class UploadJobStatus {
   bool get isTerminal => status == 'completed' || status == 'failed';
 }
 
+class DocumentChunk {
+  final int chunkIndex;
+  final String? sectionHeading;
+  final int? pageNumber;
+  final int? slideNumber;
+  final int tokenCount;
+  final String text;
+
+  const DocumentChunk({
+    required this.chunkIndex,
+    this.sectionHeading,
+    this.pageNumber,
+    this.slideNumber,
+    required this.tokenCount,
+    required this.text,
+  });
+
+  factory DocumentChunk.fromJson(Map<String, dynamic> j) => DocumentChunk(
+        chunkIndex: (j['chunk_index'] as num).toInt(),
+        sectionHeading: j['section_heading'] as String?,
+        pageNumber: j['page_number'] as int?,
+        slideNumber: j['slide_number'] as int?,
+        tokenCount: (j['token_count'] as num? ?? 0).toInt(),
+        text: j['text'] as String? ?? '',
+      );
+}
+
+class DocumentContent {
+  final String sourceFile;
+  final String assetType;
+  final int totalChunks;
+  final String fullText;
+  final List<DocumentChunk> chunks;
+
+  const DocumentContent({
+    required this.sourceFile,
+    required this.assetType,
+    required this.totalChunks,
+    required this.fullText,
+    required this.chunks,
+  });
+
+  factory DocumentContent.fromJson(Map<String, dynamic> j) => DocumentContent(
+        sourceFile: j['source_file'] as String,
+        assetType: j['asset_type'] as String? ?? '',
+        totalChunks: (j['total_chunks'] as num).toInt(),
+        fullText: j['full_text'] as String? ?? '',
+        chunks: (j['chunks'] as List)
+            .map((c) => DocumentChunk.fromJson(c as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class DocumentService {
   static Future<List<DocumentInfo>> listDocuments() async {
     final resp = await apiClient.get('/api/v1/documents');
@@ -105,9 +159,23 @@ class DocumentService {
     return UploadJobStatus.fromJson(resp.data as Map<String, dynamic>);
   }
 
-  /// URL for downloading the original file from the backend.
-  static String downloadUrl(String sourceFile) {
+  /// Fetch the extracted text content (chunks) for a document.
+  static Future<DocumentContent> getDocumentContent(String sourceFile) async {
     final encoded = Uri.encodeComponent(sourceFile);
-    return '${apiClient.options.baseUrl}/api/v1/documents/$encoded/content';
+    final resp = await apiClient.get('/api/v1/documents/$encoded/content');
+    return DocumentContent.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  /// Fetch the raw bytes of the original uploaded file.
+  static Future<({Uint8List bytes, String mimeType})> getFileBytes(
+      String sourceFile) async {
+    final encoded = Uri.encodeComponent(sourceFile);
+    final resp = await apiClient.get(
+      '/api/v1/documents/$encoded/file',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final mime =
+        resp.headers.value('content-type') ?? 'application/octet-stream';
+    return (bytes: Uint8List.fromList(resp.data as List<int>), mimeType: mime);
   }
 }
