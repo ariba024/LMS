@@ -66,7 +66,6 @@ class IngestionPipeline:
     def run(self, asset: Asset) -> ExtractedContent:
         # -- 1-2  Extract ------------------------------------------------------
         content = self._route(asset).extract(asset)
-
         # -- 3  Caption --------------------------------------------------------
         if self._captioner is not None:
             content = self._captioner.caption_content(content)

@@ -29,9 +29,10 @@ _DEFAULT_MODEL = "BAAI/bge-m3"
 class Embedder:
     """Lazy-loading sentence-transformer embedder."""
 
-    def __init__(self, model_name: str = _DEFAULT_MODEL) -> None:
-        self.model_name = model_name
-        self._model = None
+    def __init__(self, model_name: str = _DEFAULT_MODEL, batch_size: int = 32) -> None:
+        self.model_name  = model_name
+        self._batch_size = batch_size
+        self._model      = None
 
     def _load(self) -> None:
         if self._model is not None:
@@ -60,14 +61,17 @@ class Embedder:
             texts,
             show_progress_bar=True,
             convert_to_numpy=True,
-            batch_size=32,
+            batch_size=self._batch_size,
         )
         return vectors.tolist()
 
     def embed_query(self, text: str) -> list[float]:
         """Embed a single query string (no progress bar)."""
         self._load()
-        return self._model.encode(text, convert_to_numpy=True).tolist()
+        # bge-m3 is asymmetric: queries need this instruction prefix for best
+        # retrieval quality; documents are encoded without any prefix.
+        prefixed = f"Represent this sentence for searching relevant passages: {text}"
+        return self._model.encode(prefixed, convert_to_numpy=True).tolist()
 
     def embed_chunks(self, chunks: list["Chunk"]) -> list["Chunk"]:
         """Embed every chunk in place; returns the same list with .embedding set."""
@@ -79,3 +83,71 @@ class Embedder:
             chunk.embedding = vec
         logger.info("Done.")
         return chunks
+
+
+_DEFAULT_RERANKER = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+
+class Reranker:
+    """
+    4B — Optional cross-encoder reranker for post-MMR precision improvement.
+
+    After MMR retrieval returns a diverse candidate set, the cross-encoder
+    scores each (query, chunk) pair jointly — much more accurate than
+    bi-encoder cosine similarity because the query and document attend to
+    each other. The model (~90 MB) is downloaded once on first use.
+
+    Graceful fallback: if sentence-transformers is not installed or the model
+    fails to load, rerank() returns the input list unchanged so generation
+    is never blocked.
+    """
+
+    def __init__(self, model_name: str = _DEFAULT_RERANKER) -> None:
+        self.model_name = model_name
+        self._model     = None
+
+    def _load(self) -> None:
+        if self._model is not None:
+            return
+        try:
+            from sentence_transformers import CrossEncoder
+        except ImportError as exc:
+            raise RuntimeError(
+                "Reranker requires 'sentence-transformers'.\n"
+                "Install with:  pip install sentence-transformers"
+            ) from exc
+        logger.info("Loading reranker '%s' ...", self.model_name)
+        self._model = CrossEncoder(self.model_name)
+        logger.info("Reranker ready.")
+
+    def rerank(
+        self,
+        query: str,
+        hits:  list[dict],
+        top_k: int | None = None,
+    ) -> list[dict]:
+        """
+        Rerank `hits` (each with a "text" key) by cross-encoder score.
+        Returns the same dicts sorted best-first; adds a "rerank_score" key.
+        Falls back silently to the original order if the model cannot load.
+        """
+        if not hits:
+            return hits
+        try:
+            self._load()
+        except RuntimeError as exc:
+            logger.debug("Reranker unavailable, skipping: %s", exc)
+            return hits
+        pairs  = [(query, h["text"]) for h in hits]
+        scores = self._model.predict(pairs)
+        ranked = sorted(
+            zip(hits, scores), key=lambda x: float(x[1]), reverse=True
+        )
+        result = []
+        for h, score in ranked:
+            h = dict(h)
+            h["rerank_score"] = round(float(score), 4)
+            result.append(h)
+        if top_k:
+            result = result[:top_k]
+        return result
