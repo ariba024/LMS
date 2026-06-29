@@ -716,6 +716,7 @@ class CourseGenerator:
         fallback_content:   str,
         n_chunks:           int   = 8,
         use_knowledge_base: bool  = False,
+        language:           str   = "English",
     ) -> str:
         if self._inline_text is not None:
             return self._inline_text[:5000]
@@ -751,8 +752,14 @@ class CourseGenerator:
         if not hits:
             return fallback_content[:5000]
 
-        # 4B: cross-encoder rerank when available — improves precision after MMR diversity pass
-        if self._reranker is not None:
+        # 4B: cross-encoder rerank when available — improves precision after MMR diversity pass.
+        # A3: ms-marco reranker is English-trained; skip for Indian and other non-European languages
+        # where the cross-encoder produces meaningless scores and would scramble chunk order.
+        _european = {
+            "english", "en", "french", "german", "spanish", "italian",
+            "portuguese", "dutch", "polish", "romanian", "czech",
+        }
+        if self._reranker is not None and language.lower() in _european:
             hits = self._reranker.rerank(topic_focus, hits, top_k=n_chunks)
 
         return "\n\n".join(
@@ -1430,6 +1437,7 @@ Fill in the design_course_outline tool — ALL titles and descriptions in {langu
             lesson["topic_focus"], source_file, content,
             n_chunks=n_chunks,
             use_knowledge_base=use_knowledge_base,
+            language=language,
         )
 
         difficulty_line = f"DIFFICULTY: {parsed['difficulty']}" if parsed.get("difficulty") else ""
@@ -1478,7 +1486,7 @@ WRITING RULES:
    Natural, engaging, first-person plural ("Let's explore...", "Think of it...").
    Do NOT just read the document — explain, give examples, make it memorable.
    *** HARD MINIMUM: {min_words} words. TARGET: {target_words} words. ***
-   The narration is read aloud by TTS at ~150 wpm; {lesson['duration_minutes']} minutes
+   The narration is read aloud by TTS at ~{tts_wpm} wpm; {lesson['duration_minutes']} minutes
    of audio requires at least {min_words} words. Write fully — do not stop early.
    Expand every concept: add transitions, real examples, numbered steps, recap
    sentences. Keep writing until you reach the word target.
