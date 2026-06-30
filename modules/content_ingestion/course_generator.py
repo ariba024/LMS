@@ -436,44 +436,67 @@ class CourseGenerator:
             return 90, 3, 4, 7, 10
 
     @staticmethod
+    def _duration_floor(duration_range: str) -> tuple[int, int, int, int]:
+        """
+        Returns (min_total_min, min_modules, min_lessons_per_module, target_lesson_min).
+        Used by _enforce_duration to inflate under-spec outlines up to the minimum.
+        """
+        d = duration_range.lower()
+        if "15" in d or ("20" in d and "hour" not in d):
+            return 15, 1, 2, 5
+        elif "30" in d or "45" in d:
+            return 30, 2, 2, 5
+        elif "2" in d and "hour" in d:
+            return 120, 3, 4, 10
+        elif "3" in d and ("hour" in d or "+" in d):
+            return 180, 4, 4, 12
+        else:
+            return 60, 2, 3, 7
+
+    @staticmethod
     def _duration_prompt_rules(duration_range: str) -> str:
         """Returns the duration constraints as a formatted string for Claude prompts."""
         d = duration_range.lower()
         if "15" in d or ("20" in d and "hour" not in d):
             return (
-                "TOTAL DURATION: 15 to 20 minutes maximum\n"
+                "TOTAL DURATION: 15 to 20 minutes (MINIMUM 15 minutes — do not go below)\n"
                 "  - 1 module only\n"
-                "  - 2 lessons maximum\n"
-                "  - 5 to 8 minutes per lesson (duration_minutes between 5 and 8)"
+                "  - Exactly 2 lessons\n"
+                "  - 5 to 8 minutes per lesson (duration_minutes between 5 and 8)\n"
+                "  - Sum of all lesson duration_minutes MUST be at least 15"
             )
         elif "30" in d or "45" in d:
             return (
-                "TOTAL DURATION: 30 to 45 minutes maximum\n"
-                "  - 1 to 2 modules\n"
-                "  - 2 to 3 lessons per module\n"
-                "  - 5 to 8 minutes per lesson (duration_minutes between 5 and 8)"
+                "TOTAL DURATION: 30 to 45 minutes (MINIMUM 30 minutes — do not go below)\n"
+                "  - Exactly 2 modules (no fewer)\n"
+                "  - 2 to 3 lessons per module (minimum 2 per module)\n"
+                "  - 5 to 8 minutes per lesson (duration_minutes between 5 and 8)\n"
+                "  - Sum of all lesson duration_minutes MUST be at least 30"
             )
         elif "2" in d and "hour" in d:
             # checked BEFORE 3+ hours (both "2-3 hours" and "3+ hours" contain "3" and "hour")
             return (
-                "TOTAL DURATION: 2 to 3 hours\n"
-                "  - 3 to 4 modules\n"
-                "  - 4 to 5 lessons per module\n"
-                "  - 10 to 15 minutes per lesson (duration_minutes between 10 and 15)"
+                "TOTAL DURATION: 2 to 3 hours (MINIMUM 2 hours — do not go below)\n"
+                "  - 3 to 4 modules (minimum 3)\n"
+                "  - 4 to 5 lessons per module (minimum 4)\n"
+                "  - 10 to 15 minutes per lesson (duration_minutes between 10 and 15)\n"
+                "  - Sum of all lesson duration_minutes MUST be at least 120"
             )
         elif "3" in d and ("hour" in d or "+" in d):
             return (
-                "TOTAL DURATION: 3 or more hours\n"
-                "  - 4 to 5 modules\n"
-                "  - 4 to 6 lessons per module\n"
-                "  - 12 to 18 minutes per lesson (duration_minutes between 12 and 18)"
+                "TOTAL DURATION: 3 or more hours (MINIMUM 3 hours — do not go below)\n"
+                "  - 4 to 5 modules (minimum 4)\n"
+                "  - 4 to 6 lessons per module (minimum 4)\n"
+                "  - 12 to 18 minutes per lesson (duration_minutes between 12 and 18)\n"
+                "  - Sum of all lesson duration_minutes MUST be at least 180"
             )
         else:
             return (
-                "TOTAL DURATION: 60 to 90 minutes\n"
-                "  - 2 to 3 modules\n"
-                "  - 3 to 4 lessons per module\n"
-                "  - 7 to 10 minutes per lesson (duration_minutes between 7 and 10)"
+                "TOTAL DURATION: 60 to 90 minutes (MINIMUM 60 minutes — do not go below)\n"
+                "  - 2 to 3 modules (minimum 2)\n"
+                "  - 3 to 4 lessons per module (minimum 3)\n"
+                "  - 7 to 10 minutes per lesson (duration_minutes between 7 and 10)\n"
+                "  - Sum of all lesson duration_minutes MUST be at least 60"
             )
 
     @staticmethod
@@ -518,17 +541,16 @@ class CourseGenerator:
         user_instructions: str | None = None,
     ) -> dict:
         """
-        Clamps the outline to the selected duration band.
+        Clamps the outline to the selected duration band (ceiling) and enforces a
+        minimum floor so under-generated outlines are scaled up to spec.
 
-        max_total is a HARD ceiling and is never inflated.
-        If the admin specifies a module count in user_instructions, max_lessons_per_module
-        is reduced so the total still fits inside max_total.
-        If the admin specifies a duration in user_instructions that is stricter than the
-        selected band, the tighter value wins.
+        Inflating duration_minutes is meaningful: _script_lesson computes
+        min_words = duration_minutes * tts_wpm, so a higher value → longer narration.
         """
         max_total, max_mods, max_les, min_les_min, max_les_min = self._duration_limits(duration_range)
 
         # Tighten constraints if user typed a duration in free-text instructions
+        user_duration_override = False
         parsed_mins = self._parse_duration_override(user_instructions)
         if parsed_mins is not None and parsed_mins < max_total:
             logger.info(
@@ -543,18 +565,21 @@ class CourseGenerator:
             max_les     = min(max_les,    tight_les)
             min_les_min = max(min_les_min, tight_min_les)
             max_les_min = min(max_les_min, tight_max_les)
+            user_duration_override = True
 
-        # Admin-specified module/lesson counts adjust structure, not the total ceiling
+        # Admin-specified module/lesson counts — user intent overrides band defaults.
         user_mod_count, user_les_count = self._parse_structure_overrides(user_instructions)
+        user_structure_override = user_mod_count is not None or user_les_count is not None
         if user_mod_count is not None:
             logger.info("User specified %d modules — overriding band default of %d.", user_mod_count, max_mods)
             max_mods = user_mod_count
-            # Reduce lessons-per-module so the total still fits: floor( max_total / (mods × min_les_min) )
-            max_les = min(max_les, max(1, max_total // (max_mods * min_les_min)))
+            # Do NOT recompute max_les here — that formula (max_total // (mods × min_les))
+            # collapses to 1 lesson/module when mods is large, destroying course structure.
         if user_les_count is not None:
             logger.info("User specified %d lessons/module — overriding band default of %d.", user_les_count, max_les)
             max_les = user_les_count
 
+        # ── Ceiling clamp ─────────────────────────────────────────────────────────
         outline["modules"] = outline["modules"][:max_mods]
 
         for mod in outline["modules"]:
@@ -568,12 +593,48 @@ class CourseGenerator:
             for mod in outline["modules"]
             for les in mod["lessons"]
         )
-        if total > max_total:
+        # Skip total scale-down when user explicitly set structure — they intentionally
+        # asked for more content than the band ceiling allows, so honour that.
+        if total > max_total and not user_structure_override:
             scale = max_total / total
             for mod in outline["modules"]:
                 for les in mod["lessons"]:
                     # Use a lower floor during scale-down to avoid blocking the ceiling
                     les["duration_minutes"] = max(1, int(les["duration_minutes"] * scale))
+
+        # ── Floor enforcement ─────────────────────────────────────────────────────
+        # Skip when the user explicitly requested a shorter course duration.
+        if not user_duration_override:
+            min_total, _min_mods, _min_les, target_les_min = self._duration_floor(duration_range)
+            current_total = sum(
+                les["duration_minutes"]
+                for mod in outline["modules"]
+                for les in mod["lessons"]
+            )
+            total_lessons = sum(len(mod["lessons"]) for mod in outline["modules"])
+
+            if current_total < min_total and total_lessons > 0:
+                # Inflate duration_minutes so _script_lesson generates longer narration.
+                # Allow up to 15 min per lesson when the lesson count is too low to
+                # reach min_total within the band's per-lesson ceiling.
+                per_lesson_cap = max(max_les_min, 15)
+                target_per_lesson = min(
+                    per_lesson_cap,
+                    max(target_les_min, -(-min_total // total_lessons)),  # ceiling division
+                )
+                for mod in outline["modules"]:
+                    for les in mod["lessons"]:
+                        les["duration_minutes"] = max(les["duration_minutes"], target_per_lesson)
+                new_total = sum(
+                    les["duration_minutes"]
+                    for mod in outline["modules"]
+                    for les in mod["lessons"]
+                )
+                logger.warning(
+                    "Floor enforcement: outline was only %d min (%d lessons) for band '%s'. "
+                    "Inflated to %d min/lesson → %d min total.",
+                    current_total, total_lessons, duration_range, target_per_lesson, new_total,
+                )
 
         final_total = sum(les["duration_minutes"] for mod in outline["modules"] for les in mod["lessons"])
         final_lessons = sum(len(mod["lessons"]) for mod in outline["modules"])
@@ -1327,19 +1388,24 @@ Fill in the analyse_document tool — ALL text in {language}.
         user_req:          str  = "",
         user_instructions: str | None = None,
     ) -> dict:
-        _, _, _, min_les_min, max_les_min = self._duration_limits(duration_range)
+        _, _, max_les_band, min_les_min, max_les_min = self._duration_limits(duration_range)
         example_dur = (min_les_min + max_les_min) // 2
-        duration_rules = self._duration_prompt_rules(duration_range)
 
-        # If admin explicitly specified structure, add it to the prompt so Claude generates the right count
+        # When user specifies module/lesson counts, build a single unified description
+        # so the prompt never contains two contradictory module-count statements.
         user_mod_count, user_les_count = self._parse_structure_overrides(user_instructions)
         if user_mod_count is not None or user_les_count is not None:
-            overrides = []
-            if user_mod_count is not None:
-                overrides.append(f"  - EXACTLY {user_mod_count} modules (admin requirement — do not reduce)")
-            if user_les_count is not None:
-                overrides.append(f"  - EXACTLY {user_les_count} lessons per module (admin requirement — do not reduce)")
-            duration_rules += "\nADMIN STRUCTURE OVERRIDE (takes priority over duration band):\n" + "\n".join(overrides)
+            n_mods = user_mod_count if user_mod_count is not None else 2
+            n_les  = user_les_count if user_les_count is not None else max_les_band
+            duration_rules = (
+                f"STRUCTURE (admin-specified — follow exactly, do not alter counts):\n"
+                f"  - Exactly {n_mods} modules\n"
+                f"  - Exactly {n_les} lessons per module\n"
+                f"  - {min_les_min} to {max_les_min} minutes per lesson "
+                f"(duration_minutes between {min_les_min} and {max_les_min})"
+            )
+        else:
+            duration_rules = self._duration_prompt_rules(duration_range)
 
         objectives_line = f"LEARNING OBJECTIVES TO COVER: {parsed['objectives']}" if parsed.get("objectives") else ""
         difficulty_line = f"DIFFICULTY LEVEL: {parsed.get('difficulty', analysis.get('difficulty_level', 'intermediate'))}"
