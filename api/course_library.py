@@ -39,6 +39,8 @@ class CourseLibrary:
         use_knowledge_base: bool = False,
         language:           str = "English",
         difficulty:         str = "",
+        course_format:      str = "standard",
+        duration_range:     str = "",
     ) -> dict:
         """
         Persist a completed course script.
@@ -85,6 +87,8 @@ class CourseLibrary:
             row.course_script_json     = json.dumps(course_script, ensure_ascii=False)
             row.language               = language
             row.difficulty             = difficulty
+            row.course_format          = course_format
+            row.duration_range         = duration_range
             db.commit()
             # Build the return dict from the values we just wrote rather than
             # accessing ORM attributes after commit (expire_on_commit=True marks
@@ -102,6 +106,8 @@ class CourseLibrary:
                 "estimated_duration_min":   duration_min,
                 "language":                 language,
                 "difficulty":               difficulty,
+                "course_format":            course_format,
+                "duration_range":           duration_range,
                 "published":                False,
                 "assessment_num_questions": 5,
                 "assessment_pass_pct":      70,
@@ -253,6 +259,8 @@ class CourseLibrary:
             "estimated_duration_min":      row.estimated_duration_min,
             "language":                    getattr(row, "language",   "English"),
             "difficulty":                  getattr(row, "difficulty",  ""),
+            "course_format":               getattr(row, "course_format",  "standard"),
+            "duration_range":              getattr(row, "duration_range", ""),
             "published":                   getattr(row, "published",   False),
             "assessment_num_questions":    getattr(row, "assessment_num_questions", 5),
             "assessment_pass_pct":         getattr(row, "assessment_pass_pct",      70),

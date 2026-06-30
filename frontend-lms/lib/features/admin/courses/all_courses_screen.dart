@@ -177,6 +177,15 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
     );
   }
 
+  void _showRequirementsSheet(BuildContext ctx, Course course) {
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CourseRequirementsSheet(course: course),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final libraryAsync = ref.watch(libraryProvider);
@@ -357,6 +366,7 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
                 onEdit: () => _showEditSheet(ctx, filtered[i]),
                 onGenerateVideo: () => _generateVideos(ctx, filtered[i]),
                 onResults: () => _showResultsSheet(ctx, filtered[i]),
+                onRequirements: () => _showRequirementsSheet(ctx, filtered[i]),
                 onDelete: () => _confirmDelete(ctx, filtered[i]),
               ),
             ),
@@ -428,6 +438,7 @@ class _AdminCourseCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onGenerateVideo;
   final VoidCallback onResults;
+  final VoidCallback onRequirements;
   final VoidCallback onDelete;
 
   const _AdminCourseCard({
@@ -438,6 +449,7 @@ class _AdminCourseCard extends StatelessWidget {
     required this.onEdit,
     required this.onGenerateVideo,
     required this.onResults,
+    required this.onRequirements,
     required this.onDelete,
   });
 
@@ -519,6 +531,20 @@ class _AdminCourseCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: onRequirements,
+                      icon: const Icon(Icons.info_outline_rounded,
+                          color: ArrestoColors.amber, size: 20),
+                      tooltip: 'Generation requirements',
+                      style: IconButton.styleFrom(
+                        backgroundColor:
+                            ArrestoColors.amber.withValues(alpha: 0.08),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     IconButton(
                       onPressed: onResults,
                       icon: const Icon(Icons.bar_chart_rounded,
@@ -1233,4 +1259,176 @@ class _AssessmentResultsSheetState extends State<_AssessmentResultsSheet> {
               color: color,
             )),
       );
+}
+
+// ── Generation Requirements bottom sheet ──────────────────────────────────────
+
+class _CourseRequirementsSheet extends StatelessWidget {
+  final Course course;
+  const _CourseRequirementsSheet({required this.course});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        left: 24, right: 24, top: 24,
+        bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: ArrestoColors.bg2,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.info_outline_rounded,
+                color: ArrestoColors.amber, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Generation Requirements', style: ArrestoText.h3()),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ]),
+          Text(course.title,
+              style: ArrestoText.small(color: ArrestoColors.textMuted)),
+          const SizedBox(height: 20),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _ReqRow(
+                    icon: Icons.language_rounded,
+                    label: 'Language',
+                    value: course.language.isNotEmpty ? course.language : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Difficulty',
+                    value: course.difficulty.isNotEmpty ? course.difficulty : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.format_list_bulleted_rounded,
+                    label: 'Format',
+                    value: course.courseFormat.isNotEmpty ? course.courseFormat : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.timer_outlined,
+                    label: 'Duration Range',
+                    value: course.durationRange.isNotEmpty ? course.durationRange : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.group_rounded,
+                    label: 'Target Audience',
+                    value: course.desc.isNotEmpty ? course.desc : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.source_rounded,
+                    label: 'Source File',
+                    value: course.sourceFile.isNotEmpty ? course.sourceFile : '—',
+                  ),
+                  _ReqRow(
+                    icon: Icons.storage_rounded,
+                    label: 'Knowledge Base',
+                    value: course.useKnowledgeBase ? 'Enabled' : 'Disabled',
+                    valueColor: course.useKnowledgeBase
+                        ? ArrestoColors.green
+                        : ArrestoColors.textMuted,
+                  ),
+                  if (course.instructions.isNotEmpty)
+                    _ReqBlock(
+                      icon: Icons.description_outlined,
+                      label: 'Instructions / Blueprint',
+                      body: course.instructions,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReqRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
+  const _ReqRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 16, color: ArrestoColors.textMuted),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 120,
+          child: Text(label, style: ArrestoText.smallBold()),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: ArrestoText.body(color: valueColor ?? ArrestoColors.textPrimary),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ReqBlock extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String body;
+  const _ReqBlock({
+    required this.icon,
+    required this.label,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 16, color: ArrestoColors.textMuted),
+          const SizedBox(width: 10),
+          Text(label, style: ArrestoText.smallBold()),
+        ]),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: ArrestoColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: ArrestoColors.line),
+          ),
+          child: Text(
+            body,
+            style: ArrestoText.small(color: ArrestoColors.textPrimary),
+          ),
+        ),
+      ]),
+    );
+  }
 }

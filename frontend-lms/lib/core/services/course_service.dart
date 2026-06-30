@@ -145,22 +145,31 @@ class CourseService {
 
   static Course _courseFromApi(Map<String, dynamic> s) {
     final scriptId = s['script_id'] as String;
+    final published = s['published'] as bool? ?? false;
     return Course(
       id: scriptId,
       title: s['course_title'] as String,
       desc: s['target_audience'] as String? ?? '',
       cat: _categoryFromAudience(s['target_audience'] ?? ''),
       style: CourseStyle.animated,
-      status: 'published',
-      level: 'Intermediate',
+      status: published ? 'published' : 'draft',
+      level: (s['difficulty'] as String?)?.isNotEmpty == true
+          ? (s['difficulty'] as String)
+          : 'Intermediate',
       lessons: (s['lesson_count'] as num?)?.toInt() ?? (s['total_lessons'] as num?)?.toInt() ?? 0,
       mins: (s['est_minutes'] as num?)?.toInt() ?? (s['estimated_duration_min'] as num?)?.toInt() ?? 0,
       progress: 0,
       learners: 0,
       rating: 0.0,
       certified: false,
-      // short readable code derived from the UUID
       code: scriptId.replaceAll('-', '').substring(0, 8).toUpperCase(),
+      language: s['language'] as String? ?? '',
+      difficulty: s['difficulty'] as String? ?? '',
+      courseFormat: s['course_format'] as String? ?? '',
+      durationRange: s['duration_range'] as String? ?? '',
+      instructions: s['instructions'] as String? ?? '',
+      useKnowledgeBase: s['use_knowledge_base'] as bool? ?? false,
+      sourceFile: s['source_file'] as String? ?? '',
     );
   }
 

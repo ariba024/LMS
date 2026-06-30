@@ -530,6 +530,8 @@ def _sync_generate_course(
             use_knowledge_base=use_knowledge_base,
             language=language,
             difficulty=_difficulty,
+            course_format=course_format,
+            duration_range=duration_range,
         )
         _lib_saved = False
         try:
