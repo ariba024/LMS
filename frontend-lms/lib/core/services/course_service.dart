@@ -168,6 +168,7 @@ class CourseService {
       courseFormat: s['course_format'] as String? ?? '',
       durationRange: s['duration_range'] as String? ?? '',
       instructions: s['instructions'] as String? ?? '',
+      userInstructions: s['user_instructions'] as String? ?? '',
       useKnowledgeBase: s['use_knowledge_base'] as bool? ?? false,
       sourceFile: s['source_file'] as String? ?? '',
     );

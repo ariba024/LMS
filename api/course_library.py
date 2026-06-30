@@ -41,6 +41,7 @@ class CourseLibrary:
         difficulty:         str = "",
         course_format:      str = "standard",
         duration_range:     str = "",
+        user_instructions:  str | None = None,
     ) -> dict:
         """
         Persist a completed course script.
@@ -89,6 +90,7 @@ class CourseLibrary:
             row.difficulty             = difficulty
             row.course_format          = course_format
             row.duration_range         = duration_range
+            row.user_instructions      = user_instructions
             db.commit()
             # Build the return dict from the values we just wrote rather than
             # accessing ORM attributes after commit (expire_on_commit=True marks
@@ -108,6 +110,7 @@ class CourseLibrary:
                 "difficulty":               difficulty,
                 "course_format":            course_format,
                 "duration_range":           duration_range,
+                "user_instructions":        user_instructions,
                 "published":                False,
                 "assessment_num_questions": 5,
                 "assessment_pass_pct":      70,
@@ -259,9 +262,10 @@ class CourseLibrary:
             "estimated_duration_min":      row.estimated_duration_min,
             "language":                    getattr(row, "language",   "English"),
             "difficulty":                  getattr(row, "difficulty",  ""),
-            "course_format":               getattr(row, "course_format",  "standard"),
-            "duration_range":              getattr(row, "duration_range", ""),
-            "published":                   getattr(row, "published",   False),
+            "course_format":               getattr(row, "course_format",    "standard"),
+            "duration_range":              getattr(row, "duration_range",   ""),
+            "user_instructions":           getattr(row, "user_instructions", None),
+            "published":                   getattr(row, "published",        False),
             "assessment_num_questions":    getattr(row, "assessment_num_questions", 5),
             "assessment_pass_pct":         getattr(row, "assessment_pass_pct",      70),
             "assessment_time_min":         getattr(row, "assessment_time_min",      30),

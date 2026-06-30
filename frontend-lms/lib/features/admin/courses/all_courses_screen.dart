@@ -530,46 +530,49 @@ class _AdminCourseCard extends StatelessWidget {
                         onPressed: onGenerateVideo,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     IconButton(
                       onPressed: onRequirements,
                       icon: const Icon(Icons.info_outline_rounded,
-                          color: ArrestoColors.amber, size: 20),
+                          color: ArrestoColors.amber, size: 18),
                       tooltip: 'Generation requirements',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
                         backgroundColor:
                             ArrestoColors.amber.withValues(alpha: 0.08),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 3),
                     IconButton(
                       onPressed: onResults,
                       icon: const Icon(Icons.bar_chart_rounded,
-                          color: ArrestoColors.blue, size: 20),
+                          color: ArrestoColors.blue, size: 18),
                       tooltip: 'Assessment results',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
                         backgroundColor:
                             ArrestoColors.blue.withValues(alpha: 0.08),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 3),
                     IconButton(
                       onPressed: onDelete,
                       icon: const Icon(Icons.delete_outline_rounded,
-                          color: ArrestoColors.red, size: 20),
+                          color: ArrestoColors.red, size: 18),
                       tooltip: 'Delete course',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
                         backgroundColor:
                             ArrestoColors.red.withValues(alpha: 0.08),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                       ),
                     ),
                   ]),
@@ -1344,6 +1347,12 @@ class _CourseRequirementsSheet extends StatelessWidget {
                         ? ArrestoColors.green
                         : ArrestoColors.textMuted,
                   ),
+                  if (course.userInstructions.isNotEmpty)
+                    _ReqBlock(
+                      icon: Icons.edit_note_rounded,
+                      label: 'Generation Instructions',
+                      body: course.userInstructions,
+                    ),
                   if (course.instructions.isNotEmpty)
                     _ReqBlock(
                       icon: Icons.description_outlined,

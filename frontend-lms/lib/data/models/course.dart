@@ -46,6 +46,7 @@ class Course {
   final String courseFormat;
   final String durationRange;
   final String instructions;
+  final String userInstructions;
   final bool useKnowledgeBase;
   final String sourceFile;
 
@@ -70,6 +71,7 @@ class Course {
     this.courseFormat = '',
     this.durationRange = '',
     this.instructions = '',
+    this.userInstructions = '',
     this.useKnowledgeBase = false,
     this.sourceFile = '',
   });
@@ -96,6 +98,7 @@ class Course {
       courseFormat: courseFormat,
       durationRange: durationRange,
       instructions: instructions,
+      userInstructions: userInstructions,
       useKnowledgeBase: useKnowledgeBase,
       sourceFile: sourceFile,
     );

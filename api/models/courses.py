@@ -35,6 +35,7 @@ class CourseScriptRow(Base):
     difficulty:                Mapped[str]  = Column(String, nullable=False, default="")
     course_format:             Mapped[str]  = Column(String, nullable=False, default="standard")
     duration_range:            Mapped[str]  = Column(String, nullable=False, default="")
+    user_instructions:         Mapped[str | None] = Column(String)
     published:                 Mapped[bool] = Column(Boolean, nullable=False, default=False)
     # Assessment configuration set by admin in the generator wizard
     assessment_num_questions:  Mapped[int]  = Column(Integer, nullable=False, default=5)

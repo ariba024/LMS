@@ -1,4 +1,4 @@
-"""Add course_format and duration_range columns to course_scripts table.
+"""Add course_format, duration_range, and user_instructions columns to course_scripts table.
 
 Revision ID: 9c4e2a1b8f6d
 Revises: 7b2e4f9a1c3d
@@ -44,11 +44,17 @@ def upgrade() -> None:
             "course_scripts",
             sa.Column("duration_range", sa.String(), nullable=False, server_default=""),
         )
+    if "user_instructions" not in existing:
+        op.add_column(
+            "course_scripts",
+            sa.Column("user_instructions", sa.String(), nullable=True),
+        )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "sqlite":
         return  # SQLite cannot DROP COLUMN easily
+    op.drop_column("course_scripts", "user_instructions")
     op.drop_column("course_scripts", "duration_range")
     op.drop_column("course_scripts", "course_format")
