@@ -257,7 +257,7 @@ class _SidePanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: ArrestoColors.amberSoft,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -323,7 +323,7 @@ class _MyTickets extends ConsumerWidget {
                   const SizedBox(width: 12),
                   Expanded(
                       child: Text(t.subject,
-                          style: ArrestoText.body(color: ArrestoColors.ink),
+                          style: ArrestoText.body(color: ArrestoColors.textPrimary),
                           overflow: TextOverflow.ellipsis)),
                   const SizedBox(width: 8),
                   StatusBadge(status: t.status),

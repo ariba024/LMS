@@ -66,7 +66,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Leaderboard',
-                style: ArrestoText.base(color: ArrestoColors.ink)
+                style: ArrestoText.base(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             Text(widget.courseTitle,
                 style: ArrestoText.xs(color: ArrestoColors.textMuted)),
@@ -96,7 +96,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       FilledButton(
                           onPressed: _load,
                           style: FilledButton.styleFrom(
-                              backgroundColor: ArrestoColors.ink),
+                              backgroundColor: ArrestoColors.amber,
+                              foregroundColor: ArrestoColors.ink),
                           child: const Text('Retry')),
                     ],
                   ),
@@ -302,7 +303,7 @@ class _PodiumBlock extends StatelessWidget {
       children: [
         Text(
           entry.displayName.split(' ').first,
-          style: ArrestoText.xs(color: ArrestoColors.ink)
+          style: ArrestoText.xs(color: ArrestoColors.textPrimary)
               .copyWith(fontWeight: FontWeight.w600),
           overflow: TextOverflow.ellipsis,
         ),
@@ -396,7 +397,7 @@ class _LeaderRow extends StatelessWidget {
               children: [
                 Text(
                   isMe ? '${entry.displayName} (You)' : entry.displayName,
-                  style: ArrestoText.base(color: ArrestoColors.ink)
+                  style: ArrestoText.base(color: ArrestoColors.textPrimary)
                       .copyWith(fontWeight: isMe ? FontWeight.w700 : FontWeight.w500),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -410,7 +411,7 @@ class _LeaderRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('${entry.totalXp} XP',
-                  style: ArrestoText.base(color: ArrestoColors.ink)
+                  style: ArrestoText.base(color: ArrestoColors.textPrimary)
                       .copyWith(fontWeight: FontWeight.w700)),
               Text(
                 '${entry.dailyQXp}Q + ${entry.hazardXp}H',
@@ -440,7 +441,7 @@ class _EmptyLeaderboard extends StatelessWidget {
                 size: 56, color: ArrestoColors.lineStrong),
             const SizedBox(height: 16),
             Text('No rankings yet',
-                style: ArrestoText.xl(color: ArrestoColors.ink)
+                style: ArrestoText.xl(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(
@@ -452,7 +453,8 @@ class _EmptyLeaderboard extends StatelessWidget {
             FilledButton(
               onPressed: onRefresh,
               style: FilledButton.styleFrom(
-                  backgroundColor: ArrestoColors.ink),
+                  backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink),
               child: const Text('Refresh'),
             ),
           ],

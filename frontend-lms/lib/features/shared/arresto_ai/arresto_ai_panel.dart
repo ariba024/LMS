@@ -530,7 +530,7 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
         Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: ArrestoColors.surface,
             borderRadius: isSheet
                 ? const BorderRadius.vertical(top: Radius.circular(20))
                 : BorderRadius.zero,
@@ -923,7 +923,7 @@ class _EmptyState extends StatelessWidget {
               lc != null
                   ? 'Ask me about "${lc.lessonTitle}"'
                   : 'Ask me anything about safety training',
-              style: ArrestoText.h4(color: ArrestoColors.ink),
+              style: ArrestoText.h4(color: ArrestoColors.textPrimary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
@@ -1049,15 +1049,15 @@ class _MessageBubble extends StatelessWidget {
   }
 
   MarkdownStyleSheet _mdSheet() {
-    final body = ArrestoText.body(color: ArrestoColors.ink);
+    final body = ArrestoText.body(color: ArrestoColors.textPrimary);
     final small = ArrestoText.small(color: ArrestoColors.textSecondary);
     return MarkdownStyleSheet(
       p: body,
-      strong: body.copyWith(fontWeight: FontWeight.w700, color: ArrestoColors.ink),
+      strong: body.copyWith(fontWeight: FontWeight.w700, color: ArrestoColors.textPrimary),
       em: body.copyWith(fontStyle: FontStyle.italic),
-      h1: ArrestoText.h3(color: ArrestoColors.ink),
-      h2: ArrestoText.h4(color: ArrestoColors.ink),
-      h3: ArrestoText.bodyBold(color: ArrestoColors.ink),
+      h1: ArrestoText.h3(color: ArrestoColors.textPrimary),
+      h2: ArrestoText.h4(color: ArrestoColors.textPrimary),
+      h3: ArrestoText.bodyBold(color: ArrestoColors.textPrimary),
       listBullet: body,
       tableBody: small,
       blockquote: body.copyWith(

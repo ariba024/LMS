@@ -138,6 +138,7 @@ class DocxExtractor(BaseExtractor):
                     parts.append(text)
 
             elif isinstance(block, DocxTable):
+                first_row = True
                 for row in block.rows:
                     # python-docx repeats the same cell object for merged cells;
                     # deduplicate by skipping consecutive identical values.
@@ -146,9 +147,15 @@ class DocxExtractor(BaseExtractor):
                         cell_text = cell.text.strip()
                         if not seen or cell_text != seen[-1]:
                             seen.append(cell_text)
-                    row_text = " | ".join(c for c in seen if c)
+                    cells = [c for c in seen if c]
+                    row_text = " | ".join(cells)
                     if row_text:
                         parts.append(row_text)
+                        if first_row:
+                            # Markdown requires a separator row after the header
+                            # so downstream chunker and LLM parse the table correctly.
+                            parts.append(" | ".join("---" for _ in cells))
+                            first_row = False
 
         result.full_text = "\n".join(parts)
         result.images = all_images

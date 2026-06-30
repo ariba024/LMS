@@ -38,7 +38,7 @@ class AssessmentIntroScreen extends ConsumerWidget {
       children: [
         AppBar(
           backgroundColor: ArrestoColors.surface,
-          foregroundColor: ArrestoColors.ink,
+          foregroundColor: ArrestoColors.textPrimary,
           title: const Text('Assessment'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),

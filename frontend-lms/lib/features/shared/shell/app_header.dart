@@ -97,7 +97,7 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                    color: ArrestoColors.ink,
+                    color: ArrestoColors.textPrimary,
                     onPressed: _toggleNotif,
                   ),
                   if (unread > 0)
@@ -264,37 +264,11 @@ class _ProfileDropdown extends ConsumerWidget {
 class _ArrestoLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: ArrestoColors.amber,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: const Center(
-            child: Text('A',
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: ArrestoColors.ink)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('ARRESTO',
-                style: ArrestoText.eyebrow(color: ArrestoColors.ink)
-                    .copyWith(letterSpacing: 2)),
-            Text('LMS',
-                style: ArrestoText.xs(color: ArrestoColors.textMuted)
-                    .copyWith(letterSpacing: 1)),
-          ],
-        ),
-      ],
+    return Image.asset(
+      'assets/images/arresto_logo.png',
+      height: 34,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
     );
   }
 }
@@ -335,7 +309,7 @@ class _RoleSwitcher extends ConsumerWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? ArrestoColors.ink : Colors.transparent,
+          color: active ? ArrestoColors.amber : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -343,7 +317,7 @@ class _RoleSwitcher extends ConsumerWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : ArrestoColors.textMuted,
+            color: active ? ArrestoColors.ink : ArrestoColors.textMuted,
           ),
         ),
       ),

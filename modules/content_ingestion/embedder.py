@@ -26,13 +26,31 @@ if TYPE_CHECKING:
 _DEFAULT_MODEL = "BAAI/bge-m3"
 
 
+def _resolve_device(pref: str) -> str:
+    """Resolve 'auto' to 'cuda' or 'cpu' based on torch availability."""
+    if pref != "auto":
+        return pref
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+
 class Embedder:
     """Lazy-loading sentence-transformer embedder."""
 
-    def __init__(self, model_name: str = _DEFAULT_MODEL, batch_size: int = 32) -> None:
-        self.model_name  = model_name
-        self._batch_size = batch_size
-        self._model      = None
+    def __init__(
+        self,
+        model_name: str = _DEFAULT_MODEL,
+        batch_size: int | None = None,
+        device:     str = "auto",
+    ) -> None:
+        self.model_name       = model_name
+        self._device_pref     = device
+        self._batch_size_pref = batch_size
+        self._batch_size      = batch_size or 8  # updated in _load() once device is known
+        self._model           = None
 
     def _load(self) -> None:
         if self._model is not None:
@@ -44,10 +62,19 @@ class Embedder:
                 "Embedding requires 'sentence-transformers'.\n"
                 "Install with:  pip install sentence-transformers"
             ) from exc
-        logger.info("Loading '%s' ...", self.model_name)
-        self._model = SentenceTransformer(self.model_name)
-        dim = self._model.get_sentence_embedding_dimension()
-        logger.info("Ready -- embedding dimension: %d", dim)
+
+        device = _resolve_device(self._device_pref)
+        logger.info("Loading '%s' on %s ...", self.model_name, device)
+        self._model = SentenceTransformer(self.model_name, device=device)
+        get_dim = getattr(self._model, "get_embedding_dimension",
+                          self._model.get_sentence_embedding_dimension)
+        dim = get_dim()
+        logger.info("Ready -- embedding dimension: %d on %s", dim, device)
+
+        # Larger batches are efficient on GPU; keep small on CPU to avoid
+        # exhausting system RAM (OS error 1455 on Windows).
+        if self._batch_size_pref is None:
+            self._batch_size = 32 if device == "cuda" else 8
 
     @property
     def dimension(self) -> int:
@@ -102,9 +129,10 @@ class Reranker:
     is never blocked.
     """
 
-    def __init__(self, model_name: str = _DEFAULT_RERANKER) -> None:
-        self.model_name = model_name
-        self._model     = None
+    def __init__(self, model_name: str = _DEFAULT_RERANKER, device: str = "auto") -> None:
+        self.model_name   = model_name
+        self._device_pref = device
+        self._model       = None
 
     def _load(self) -> None:
         if self._model is not None:
@@ -116,8 +144,9 @@ class Reranker:
                 "Reranker requires 'sentence-transformers'.\n"
                 "Install with:  pip install sentence-transformers"
             ) from exc
-        logger.info("Loading reranker '%s' ...", self.model_name)
-        self._model = CrossEncoder(self.model_name)
+        device = _resolve_device(self._device_pref)
+        logger.info("Loading reranker '%s' on %s ...", self.model_name, device)
+        self._model = CrossEncoder(self.model_name, device=device)
         logger.info("Reranker ready.")
 
     def rerank(

@@ -284,6 +284,92 @@ _LESSON_TOOL: dict = {
 }
 
 
+_SECTION_SUMMARY_TOOL: dict = {
+    "name": "summarise_section",
+    "description": "Extract topics, key concepts, and procedures from one document section",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "topics":       {"type": "array", "items": {"type": "string"}, "description": "Main topics covered"},
+            "key_concepts": {"type": "array", "items": {"type": "string"}, "description": "Key terminology and concepts"},
+            "procedures":   {"type": "array", "items": {"type": "string"}, "description": "Notable procedures or safety rules"},
+        },
+        "required": ["topics", "key_concepts", "procedures"],
+    },
+}
+
+_COHERENCE_TOOL: dict = {
+    "name": "report_coherence_issues",
+    "description": "Report quality issues found in a course script",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "issues": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Quality issues found; empty list if the script is coherent",
+            },
+        },
+        "required": ["issues"],
+    },
+}
+
+_MICRO_COURSE_TOOL: dict = {
+    "name": "generate_micro_course_items",
+    "description": "Return a structured micro-course with slides and quizzes",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "course_title":                {"type": "string"},
+            "course_description":          {"type": "string"},
+            "estimated_total_duration_min": {"type": "integer"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "description": "type: 'slide' | 'quiz' | 'closing_slide'",
+                    "properties": {
+                        "type":         {"type": "string"},
+                        "slide_number": {"type": "integer"},
+                        "quiz_number":  {"type": "integer"},
+                        "title":        {"type": "string"},
+                        "narration":    {"type": "string"},
+                        "bullets":      {"type": "array", "items": {"type": "string"}},
+                        "takeaway":     {"type": "string"},
+                        "questions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type":        {"type": "string"},
+                                    "question":    {"type": "string"},
+                                    "statement":   {"type": "string"},
+                                    "front":       {"type": "string"},
+                                    "back":        {"type": "string"},
+                                    "options": {
+                                        "type": "object",
+                                        "properties": {
+                                            "A": {"type": "string"}, "B": {"type": "string"},
+                                            "C": {"type": "string"}, "D": {"type": "string"},
+                                        },
+                                    },
+                                    "correct":     {"type": "string"},
+                                    "answer":      {"type": "boolean"},
+                                    "explanation": {"type": "string"},
+                                },
+                                "required": ["type"],
+                            },
+                        },
+                    },
+                    "required": ["type", "title"],
+                },
+            },
+        },
+        "required": ["course_title", "course_description", "estimated_total_duration_min", "items"],
+    },
+}
+
+
 # ── Generator ──────────────────────────────────────────────────────────────────
 
 class CourseGenerator:
@@ -291,14 +377,15 @@ class CourseGenerator:
 
     def __init__(
         self,
-        vector_store:    "VectorStore",
-        api_key:         str | None = None,
-        model:           str | None = None,
-        embedder:        "Embedder | None" = None,
-        enable_thinking: bool = False,
-        thinking_budget: int  = 8_000,
-        temperature:     float = 0.0,
-        reranker:        "Reranker | None" = None,
+        vector_store:        "VectorStore",
+        api_key:             str | None = None,
+        model:               str | None = None,
+        embedder:            "Embedder | None" = None,
+        enable_thinking:     bool  = False,
+        thinking_budget:     int   = 8_000,
+        temperature:         float = 0.0,
+        reranker:            "Reranker | None" = None,
+        min_retrieval_score: float = 0.55,
     ) -> None:
         self._store           = vector_store
         self._model           = model or self._MODEL
@@ -307,6 +394,7 @@ class CourseGenerator:
         self._thinking_budget = thinking_budget
         self._temperature     = temperature
         self._reranker        = reranker
+        self._min_score       = min_retrieval_score
         self._inline_text: str | None = None
         # Keyed by query string — avoids re-encoding the same topic_focus twice when
         # multiple lessons share a closely-named focus within one generation run.
@@ -707,8 +795,6 @@ class CourseGenerator:
 
     # ── Relevant chunk retrieval ────────────────────────────────────────────────
 
-    _MIN_SCORE = 0.55   # cosine similarity floor for lesson context retrieval
-
     def _get_lesson_context(
         self,
         topic_focus:        str,
@@ -732,7 +818,7 @@ class CourseGenerator:
         # First pass: MMR retrieval with quality floor — diverse, relevant chunks.
         hits = self._store.mmr_query(
             q_vec, n_results=n_chunks, fetch_k=n_chunks * 3,
-            source_file=filter_file, min_score=self._MIN_SCORE,
+            source_file=filter_file, min_score=self._min_score,
         )
 
         # Fallback: if fewer than 3 chunks cleared the threshold (topic is sparsely
@@ -745,7 +831,7 @@ class CourseGenerator:
             if raw_hits:
                 logger.debug(
                     "Only %d chunk(s) scored >= %.2f for '%s' — using top-%d unfiltered",
-                    len(hits), self._MIN_SCORE, topic_focus, len(raw_hits),
+                    len(hits), self._min_score, topic_focus, len(raw_hits),
                 )
                 hits = raw_hits
 
@@ -775,19 +861,15 @@ class CourseGenerator:
         """
         Quick topic/concept extraction from one document section.
         Used by _build_analysis_context to map a large document before full analysis.
-        Uses plain _call + _parse_json (lightweight; schema not critical here).
         """
         prompt = (
             f"Document section {idx} of {total}. "
-            "Extract the main topics, key concepts, and notable procedures or safety rules.\n\n"
-            f"TEXT:\n{text}\n\n"
-            f'Return JSON in {language}: '
-            '{{"topics": ["..."], "key_concepts": ["..."], "procedures": ["..."]}}\n'
-            "Return ONLY the JSON."
+            f"Extract the main topics, key concepts, and notable procedures or safety rules. "
+            f"All text fields must be in {language}.\n\n"
+            f"TEXT:\n{text}"
         )
         try:
-            raw = self._call(prompt, max_tokens=512)
-            return self._parse_json(raw)
+            return self._call_structured(prompt, _SECTION_SUMMARY_TOOL, max_tokens=512)
         except Exception as exc:
             logger.warning("Section %d/%d summary failed (skipped): %s", idx, total, exc)
             return {"topics": [], "key_concepts": [], "procedures": []}
@@ -920,7 +1002,10 @@ class CourseGenerator:
             for mod in outline.get("modules", [])
             for les in mod.get("lessons", [])
         )
-        dropped = [t for t in main_topics if t.lower() not in lesson_corpus]
+        dropped = [
+            t for t in main_topics
+            if not re.search(r'\b' + re.escape(t.lower()) + r'\b', lesson_corpus)
+        ]
         if dropped:
             logger.warning(
                 "Topic coverage gap — %d topic(s) from analysis have no lesson: %s",
@@ -1009,15 +1094,12 @@ class CourseGenerator:
         prompt = (
             "Review the following course script outline for quality issues.\n\n"
             + "\n\n---\n\n".join(entries)
-            + '\n\nReturn JSON: {"issues": ["issue 1", ...]}\n\n'
-            "Look for: duplicate key terms across lessons, contradictory objectives, "
-            "lessons that don't logically progress, objectives that don't match the "
-            "lesson title. Return an empty list if the script looks coherent. "
-            "Return ONLY the JSON."
+            + "\n\nLook for: duplicate key terms across lessons, contradictory objectives, "
+            "lessons that don't logically progress, objectives that don't match the lesson title. "
+            "Return an empty list if the script looks coherent."
         )
         try:
-            raw    = self._call(prompt, max_tokens=1024)
-            data   = self._parse_json(raw)
+            data   = self._call_structured(prompt, _COHERENCE_TOOL, max_tokens=1024)
             issues = data.get("issues", [])
             if issues:
                 logger.warning(
@@ -1104,8 +1186,11 @@ class CourseGenerator:
 
         # 7A — enrich analysis with per-topic paragraph coverage so _outline can
         # weight lesson durations toward topics with more source material.
+        # Skip when language != English: _analyse returns topic names in the
+        # target language (e.g. Hindi) but full_content is the English source
+        # text, so keyword matching would always score 0 and add no information.
         main_topics = analysis.get("main_topics", [])
-        if main_topics:
+        if main_topics and language.lower() in ("english", "en"):
             analysis["topic_chunk_coverage"] = self._estimate_topic_coverage(
                 main_topics, full_content
             )
@@ -1576,6 +1661,11 @@ Fill in the script_lesson tool — ALL content in {language}.
             f"[{c['metadata'].get('section_heading', '')}]\n{c['text']}"
             for c in chunks
         )
+        # B1: use MMR retrieval instead of a hard-truncated slice so the model sees
+        # topically relevant content spread across the whole document.
+        context = self._get_lesson_context(
+            instructions[:400], source_file, full_content, n_chunks=20, language=language,
+        )
         logger.info("[custom] %d chunks loaded. Generating from blueprint ...", len(chunks))
 
         prompt = f"""You are an expert instructional designer.
@@ -1590,66 +1680,15 @@ TARGET AUDIENCE: {target_audience}
 COURSE BLUEPRINT:
 {instructions}
 
-SOURCE DOCUMENT (use as your factual knowledge base):
-{full_content[:9000]}
-
-Return the complete course as a single JSON object:
-{{
-  "course_title": "...",
-  "course_description": "...",
-  "estimated_total_duration_min": <integer>,
-  "items": [
-    {{
-      "type": "slide",
-      "slide_number": 1,
-      "title": "...",
-      "narration": "full spoken narration text",
-      "bullets": ["bullet 1", "bullet 2", "bullet 3"],
-      "takeaway": "one-line takeaway sentence"
-    }},
-    {{
-      "type": "quiz",
-      "quiz_number": 1,
-      "title": "...",
-      "questions": [
-        {{
-          "type": "mcq",
-          "question": "...",
-          "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
-          "correct": "B",
-          "explanation": "..."
-        }},
-        {{
-          "type": "flashcard",
-          "front": "...",
-          "back": "..."
-        }},
-        {{
-          "type": "true_false",
-          "statement": "...",
-          "answer": false,
-          "explanation": "..."
-        }}
-      ]
-    }},
-    {{
-      "type": "closing_slide",
-      "title": "...",
-      "narration": "closing narration text"
-    }}
-  ]
-}}
+SOURCE DOCUMENT (factual knowledge base — draw all facts from this):
+{context}
 
 Rules:
-- Output ONLY the JSON — no markdown fences, no commentary.
 - Follow the blueprint's slide order and quiz placement precisely.
 - Use the exact quiz questions from the blueprint where given.
+- Write ALL content in {language}.
 """
-        raw  = self._call(prompt, max_tokens=8192)
-        data = self._parse_json(raw)
-
-        if "course_script" in data and isinstance(data["course_script"], dict):
-            data = data["course_script"]
+        data = self._call_structured(prompt, _MICRO_COURSE_TOOL, max_tokens=8192)
 
         return CourseScript(
             course_title=data.get("course_title", course_title or source_file),
@@ -1665,71 +1704,26 @@ Rules:
         content_text:    str,
         course_title:    str | None = None,
         target_audience: str = "learners",
+        language:        str = "English",
     ) -> CourseScript:
         """Generate a custom item-based course from pasted text."""
         logger.info("[text->micro] Single-call micro-course (%d chars) ...", len(content_text))
-        _content = content_text[:9000]
+        _content = _diverse_sample(content_text, 9_000)
 
         prompt = f"""You are an expert instructional designer.
 Create a structured educational course from the SOURCE CONTENT below.
 The content defines lesson sections and quiz questions — extract them faithfully.
 
+═══ FIXED CONSTRAINTS ═══════════════════════════════════════════
+OUTPUT LANGUAGE: {language}
+  → Write ALL text fields in {language}. NO exceptions.
+TARGET AUDIENCE: {target_audience}
+═════════════════════════════════════════════════════════════════
+
 SOURCE CONTENT:
 {_content}
-
-TARGET AUDIENCE: {target_audience}
-
-Return ONLY a valid JSON object:
-{{
-  "course_title": "...",
-  "course_description": "...",
-  "estimated_total_duration_min": 15,
-  "items": [
-    {{
-      "type": "slide",
-      "slide_number": 1,
-      "title": "...",
-      "narration": "full spoken narration (minimum 150 words)",
-      "bullets": ["key point 1", "key point 2", "key point 3"],
-      "takeaway": "one-line key takeaway"
-    }},
-    {{
-      "type": "quiz",
-      "quiz_number": 1,
-      "title": "Knowledge Check",
-      "questions": [
-        {{
-          "type": "mcq",
-          "question": "...",
-          "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
-          "correct": "B",
-          "explanation": "..."
-        }},
-        {{
-          "type": "flashcard",
-          "front": "term shown on front",
-          "back": "definition revealed on flip"
-        }},
-        {{
-          "type": "true_false",
-          "statement": "a statement that is either true or false",
-          "answer": false,
-          "explanation": "..."
-        }}
-      ]
-    }},
-    {{
-      "type": "closing_slide",
-      "title": "Summary",
-      "narration": "brief closing summary"
-    }}
-  ]
-}}"""
-
-        raw  = self._call(prompt, max_tokens=8192)
-        data = self._parse_json(raw)
-        if "course_script" in data and isinstance(data["course_script"], dict):
-            data = data["course_script"]
+"""
+        data = self._call_structured(prompt, _MICRO_COURSE_TOOL, max_tokens=8192)
 
         return CourseScript(
             course_title=data.get("course_title", course_title or "Course"),
@@ -1746,17 +1740,19 @@ Return ONLY a valid JSON object:
         course_title:      str | None = None,
         target_audience:   str = "learners",
         mode:              str = "detailed",
+        language:          str = "English",
+        duration_range:    str = "60-90 minutes",
         progress_callback: "Callable[[int, int], None] | None" = None,
     ) -> CourseScript:
         """Generate a course from raw pasted text without requiring ChromaDB."""
         source_name = "inline_content"
         logger.info("[text] Generating from pasted text (%d chars, mode=%s) ...", len(content_text), mode)
 
-        analysis = self._analyse(content_text, source_name, target_audience, {}, "English")
+        analysis = self._analyse(content_text, source_name, target_audience, {}, language)
         outline  = self._outline(
             analysis,
             course_title or analysis.get("suggested_title", "Course"),
-            target_audience, {}, "English",
+            target_audience, {}, language,
         )
 
         if mode == "quick":
@@ -1771,7 +1767,7 @@ Return ONLY a valid JSON object:
         try:
             modules = self._script_all(
                 outline, content_text, target_audience, source_name,
-                progress_callback, {}, False, "English",
+                progress_callback, {}, False, language,
             )
         finally:
             self._inline_text = None

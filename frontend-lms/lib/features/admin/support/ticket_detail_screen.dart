@@ -53,7 +53,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       backgroundColor: ArrestoColors.background,
       appBar: AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         title: Text(ticket.id, style: ArrestoText.h4()),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),

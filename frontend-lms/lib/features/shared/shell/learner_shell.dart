@@ -7,6 +7,7 @@ import '../../../core/theme/spacing.dart';
 import 'app_header.dart';
 import '../arresto_ai/arresto_ai_panel.dart';
 import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/circuit_board_background.dart';
 
 class LearnerShell extends ConsumerWidget {
   final Widget child;
@@ -19,18 +20,20 @@ class LearnerShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
-      body: Column(
-        children: [
-          const AppHeader(),
-          Expanded(
-            child: Row(
-              children: [
-                if (isDesktop) const _LearnerSidebar(),
-                Expanded(child: child),
-              ],
+      body: CircuitBoardBackground(
+        child: Column(
+          children: [
+            const AppHeader(),
+            Expanded(
+              child: Row(
+                children: [
+                  if (isDesktop) const _LearnerSidebar(),
+                  Expanded(child: child),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: isMobile ? const _LearnerBottomNav() : null,
       floatingActionButton: const _AIFab(),
@@ -148,7 +151,7 @@ class _LearnerSidebar extends ConsumerWidget {
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF92400E))),
+                            color: ArrestoColors.amber)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -157,7 +160,7 @@ class _LearnerSidebar extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('James Harrington',
-                          style: ArrestoText.small(color: ArrestoColors.ink)
+                          style: ArrestoText.small(color: ArrestoColors.textPrimary)
                               .copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                       Text('Learner',
@@ -321,7 +324,7 @@ class _AIFab extends StatelessWidget {
     }
 
     return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.ink,
+      backgroundColor: ArrestoColors.amber,
       onPressed: () => showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -330,7 +333,7 @@ class _AIFab extends StatelessWidget {
       ),
       icon: const ArrestoAiLogo(size: 24),
       label: Text('Arresto AI',
-          style: ArrestoText.small(color: Colors.white)
+          style: ArrestoText.small(color: ArrestoColors.ink)
               .copyWith(fontWeight: FontWeight.w600)),
     );
   }

@@ -98,7 +98,7 @@ class CourseDetailScreen extends ConsumerWidget {
             slivers: [
               SliverAppBar(
                 backgroundColor: ArrestoColors.surface,
-                foregroundColor: ArrestoColors.ink,
+                foregroundColor: ArrestoColors.textPrimary,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: () => context.pop(),
@@ -215,7 +215,7 @@ class CourseDetailScreen extends ConsumerWidget {
   AppBar _appBar(BuildContext context, WidgetRef ref, String title) =>
       AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),

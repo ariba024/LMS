@@ -1814,7 +1814,7 @@ class _TranscriptTabState extends State<_TranscriptTab> {
                   : (widget.lesson.narrationScript!.toLowerCase().contains(q)
                       ? widget.lesson.narrationScript!
                       : '(No matches for "$q")'),
-              style: ArrestoText.body(color: ArrestoColors.ink),
+              style: ArrestoText.body(color: ArrestoColors.textPrimary),
             ),
           ),
         ] else ...[
@@ -1874,7 +1874,7 @@ class _TranscriptTabState extends State<_TranscriptTab> {
                   Expanded(
                     child: Text(seg.$2,
                         style: isActive
-                            ? ArrestoText.body(color: ArrestoColors.ink)
+                            ? ArrestoText.body(color: ArrestoColors.textPrimary)
                                 .copyWith(fontWeight: FontWeight.w600)
                             : ArrestoText.body()),
                   ),

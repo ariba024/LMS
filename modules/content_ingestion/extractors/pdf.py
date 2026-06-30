@@ -41,10 +41,22 @@ def _is_toc_page(text: str, page_number: int) -> bool:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     if not lines:
         return False
-    # Explicit heading on first line
-    first = lines[0].lower()
-    if any(first == kw or first.startswith(kw + " ") for kw in
-           ("table of contents", "contents", "index", "table des matières")):
+    # Explicit heading on first line — English, French, and common Indian languages
+    _TOC_HEADINGS = {
+        "table of contents", "contents", "index", "table des matières",
+        "विषय सूची", "विषय-सूची", "अनुक्रमणिका", "सामग्री",   # Hindi
+        "உள்ளடக்கம்",                                           # Tamil
+        "విషయ సూచిక", "విషయాలు",                               # Telugu
+        "ಪರಿವಿಡಿ", "ವಿಷಯ ಸೂಚಿ",                               # Kannada
+        "ഉള്ളടക്കം",                                            # Malayalam
+        "সূচিপত্র", "বিষয়বস্তু",                               # Bengali
+        "સામગ્રી", "અનુક્રમ",                                   # Gujarati
+        "ਵਿਸ਼ਾ ਸੂਚੀ",                                           # Punjabi
+    }
+    first = lines[0].strip()
+    if first.lower() in _TOC_HEADINGS or any(
+        first.lower().startswith(kw + " ") for kw in _TOC_HEADINGS
+    ):
         return True
     # Heuristic: most lines end with a digit (page number) or "..." leader
     if len(lines) < 4:

@@ -245,7 +245,7 @@ class _LearnerRow extends StatelessWidget {
                 Expanded(
                     child: Text('${learner.enrolled}',
                         style: ArrestoText.body(
-                            color: ArrestoColors.ink))),
+                            color: ArrestoColors.textPrimary))),
                 Expanded(
                   flex: 2,
                   child: Row(

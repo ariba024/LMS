@@ -88,8 +88,23 @@ async def lifespan(app: FastAPI):
             _db.commit()
             logger.info("Seeded default admin: admin@arresto.in / Admin@123 — change immediately!")
 
+    # GPU initialisation — detect CUDA early so all models land on the same device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name  = torch.cuda.get_device_name(0)
+            vram_gb   = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            logger.info("CUDA available — %s (%.1f GB VRAM)", gpu_name, vram_gb)
+            # Reserve the CUDA context now so the first model load isn't slow
+            torch.cuda.init()
+        else:
+            logger.info("CUDA not available — using CPU for all ML models")
+    except ImportError:
+        logger.info("torch not installed — ML models will use CPU")
+
     vs = VectorStore(persist_dir=str(settings.chroma_db_dir))
     em = Embedder()
+    em._load()  # warm up on GPU at startup instead of on first request
 
     captioner = None
     if settings.enable_captioning:

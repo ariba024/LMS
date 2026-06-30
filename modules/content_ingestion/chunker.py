@@ -122,7 +122,12 @@ def _slug(filename: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", filename.lower())[:40].strip("_")
 
 
-_SENTENCE_END = re.compile(r'(?<=[.!?])\s+(?=[A-Z"\'(\[])')
+# । = Devanagari danda (।), ॥ = double danda (॥) — Indian sentence terminators.
+# ऀ-ൿ covers all major Indian scripts (Devanagari, Bengali, Gujarati,
+# Gurmukhi, Oriya, Tamil, Telugu, Kannada, Malayalam).
+_SENTENCE_END = re.compile(
+    r'(?<=[.!?।॥])\s+(?=[A-Zऀ-ൿ"\'(\[])'
+)
 
 
 def _split_at_sentences(text: str, max_tokens: int) -> list[str]:

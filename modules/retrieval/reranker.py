@@ -20,11 +20,22 @@ logger = logging.getLogger("arresto.retrieval.reranker")
 _DEFAULT_MODEL = "BAAI/bge-reranker-large"
 
 
+def _resolve_device(pref: str) -> str:
+    if pref != "auto":
+        return pref
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+
 class Reranker:
 
-    def __init__(self, model_name: str = _DEFAULT_MODEL) -> None:
-        self._model_name = model_name
-        self._model = None
+    def __init__(self, model_name: str = _DEFAULT_MODEL, device: str = "auto") -> None:
+        self._model_name  = model_name
+        self._device_pref = device
+        self._model       = None
         self._load()  # eager-load at startup so first request isn't slow
 
     def _load(self) -> None:
@@ -37,8 +48,9 @@ class Reranker:
                 "Reranker requires 'sentence-transformers'.\n"
                 "Install with:  pip install sentence-transformers"
             ) from exc
-        logger.info("Loading '%s' ...", self._model_name)
-        self._model = CrossEncoder(self._model_name)
+        device = _resolve_device(self._device_pref)
+        logger.info("Loading '%s' on %s ...", self._model_name, device)
+        self._model = CrossEncoder(self._model_name, device=device)
         logger.info("Ready.")
 
     def rerank(

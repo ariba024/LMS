@@ -1,3 +1,6 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
 import 'api_client.dart';
 
 class VideoRenderJob {
@@ -116,5 +119,25 @@ class VideoService {
   /// Throws a DioException if the job is still active or not found.
   static Future<void> deleteRender(String renderId) async {
     await apiClient.delete('/api/v1/video/renders/$renderId');
+  }
+
+  /// Returns the stream URL for a completed render (supports Range requests /
+  /// seeking). Used as the `<video>` element src in the inline player.
+  static Future<String> getStreamUrl(String renderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_access_token') ?? '';
+    final base = ApiConfig.baseUrl;
+    final query = token.isNotEmpty ? '?token=${Uri.encodeComponent(token)}' : '';
+    return '$base/api/v1/video/renders/$renderId/stream$query';
+  }
+
+  /// Returns the download URL for a completed render (Content-Disposition:
+  /// attachment), so the browser saves it as a file.
+  static Future<String> getDownloadUrl(String renderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_access_token') ?? '';
+    final base = ApiConfig.baseUrl;
+    final query = token.isNotEmpty ? '?token=${Uri.encodeComponent(token)}' : '';
+    return '$base/api/v1/video/renders/$renderId/download$query';
   }
 }

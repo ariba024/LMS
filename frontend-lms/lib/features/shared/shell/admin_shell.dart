@@ -6,6 +6,7 @@ import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import 'app_header.dart';
 import '../arresto_ai/arresto_ai_panel.dart';
+import '../../../core/widgets/circuit_board_background.dart';
 
 class AdminShell extends ConsumerWidget {
   final Widget child;
@@ -19,19 +20,21 @@ class AdminShell extends ConsumerWidget {
       backgroundColor: ArrestoColors.background,
       floatingActionButton: const _AIFab(),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Column(
-        children: [
-          const AppHeader(),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (isDesktop) const _AdminSidebar(),
-                Expanded(child: child),
-              ],
+      body: CircuitBoardBackground(
+        child: Column(
+          children: [
+            const AppHeader(),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (isDesktop) const _AdminSidebar(),
+                  Expanded(child: child),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -43,7 +46,7 @@ class _AIFab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.ink,
+      backgroundColor: ArrestoColors.amber,
       onPressed: () => showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -54,14 +57,14 @@ class _AIFab extends StatelessWidget {
         width: 22,
         height: 22,
         decoration: const BoxDecoration(
-          color: ArrestoColors.amber,
+          color: ArrestoColors.ink,
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.auto_awesome_rounded,
-            size: 13, color: ArrestoColors.ink),
+            size: 13, color: ArrestoColors.amber),
       ),
       label: Text('Arresto AI',
-          style: ArrestoText.small(color: Colors.white)
+          style: ArrestoText.small(color: ArrestoColors.ink)
               .copyWith(fontWeight: FontWeight.w600)),
     );
   }
@@ -168,7 +171,7 @@ class _AdminSidebar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Admin User',
-                          style: ArrestoText.small(color: ArrestoColors.ink)
+                          style: ArrestoText.small(color: ArrestoColors.textPrimary)
                               .copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                       Text('Administrator',

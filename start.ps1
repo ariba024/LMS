@@ -12,7 +12,7 @@ Write-Host ""
 
 # ── 1. LMS backend (includes attention WebSocket on /ws/detect) ────────────────
 Start-Process powershell -ArgumentList "-NoExit", "-Command", `
-    "cd '$root'; .venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port $ApiPort --reload" `
+    "cd '$root'; .venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port $ApiPort --reload --reload-dir api --reload-dir modules --reload-delay 3" `
     -WindowStyle Normal
 
 Start-Sleep -Milliseconds 800

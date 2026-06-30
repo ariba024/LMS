@@ -107,7 +107,7 @@ class _CoursePickerBar extends StatelessWidget {
                           isDense: true,
                           isExpanded: true,
                           style: ArrestoText.xs()
-                              .copyWith(color: ArrestoColors.ink),
+                              .copyWith(color: ArrestoColors.textPrimary),
                           icon: const Icon(Icons.expand_more_rounded,
                               size: 16, color: ArrestoColors.textMuted),
                           items: courses!

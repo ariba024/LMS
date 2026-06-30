@@ -57,7 +57,7 @@ class _LearnerDetailScreenState extends ConsumerState<LearnerDetailScreen> {
         backgroundColor: ArrestoColors.background,
         appBar: AppBar(
           backgroundColor: ArrestoColors.surface,
-          foregroundColor: ArrestoColors.ink,
+          foregroundColor: ArrestoColors.textPrimary,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () => context.pop(),
@@ -73,7 +73,7 @@ class _LearnerDetailScreenState extends ConsumerState<LearnerDetailScreen> {
       backgroundColor: ArrestoColors.background,
       appBar: AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         title: Text(learner.name, style: ArrestoText.h4()),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
@@ -106,7 +106,7 @@ class _LearnerDetailScreenState extends ConsumerState<LearnerDetailScreen> {
                     children: [
                       Text('Last active', style: ArrestoText.xs()),
                       Text(learner.lastActive,
-                          style: ArrestoText.small(color: ArrestoColors.ink)
+                          style: ArrestoText.small(color: ArrestoColors.textPrimary)
                               .copyWith(fontWeight: FontWeight.w600)),
                     ],
                   ),

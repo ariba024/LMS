@@ -22,10 +22,10 @@ class ArrestoChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? ArrestoColors.ink : ArrestoColors.bg2,
+          color: active ? ArrestoColors.amber : ArrestoColors.bg2,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: active ? ArrestoColors.ink : ArrestoColors.lineStrong,
+            color: active ? ArrestoColors.amber : ArrestoColors.lineStrong,
           ),
         ),
         child: Text(
@@ -33,7 +33,7 @@ class ArrestoChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : ArrestoColors.textSecondary,
+            color: active ? ArrestoColors.ink : ArrestoColors.textSecondary,
           ),
         ),
       ),

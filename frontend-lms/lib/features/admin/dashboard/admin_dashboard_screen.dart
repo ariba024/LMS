@@ -354,7 +354,7 @@ class _CourseRow extends StatelessWidget {
             Expanded(
               child: Text('${course.learners}',
                   style: ArrestoText.bodySm(
-                      color: ArrestoColors.ink)),
+                      color: ArrestoColors.textPrimary)),
             ),
             IconButton(
               icon: const Icon(Icons.edit_rounded,
@@ -399,7 +399,7 @@ class _AdminSidebar extends ConsumerWidget {
                       Expanded(
                           child: Text(item.$2,
                               style: ArrestoText.bodySm(
-                                  color: ArrestoColors.ink))),
+                                  color: ArrestoColors.textPrimary))),
                       const SizedBox(width: 6),
                       Text(item.$3, style: ArrestoText.xs()),
                     ],
@@ -453,7 +453,7 @@ class _AdminSidebar extends ConsumerWidget {
                                   Expanded(
                                       child: Text(job.title,
                                           style: ArrestoText.bodySm(
-                                              color: ArrestoColors.ink),
+                                              color: ArrestoColors.textPrimary),
                                           overflow: TextOverflow.ellipsis)),
                                   Text('${(job.progress * 100).round()}%',
                                       style: ArrestoText.small()),
@@ -528,7 +528,7 @@ class _AdminSidebar extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: ArrestoColors.amberSoft,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(

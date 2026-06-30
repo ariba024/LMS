@@ -297,7 +297,7 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
             // ── app bar with timer ──────────────────────────────────────
             AppBar(
               backgroundColor:       ArrestoColors.surface,
-              foregroundColor:       ArrestoColors.ink,
+              foregroundColor:       ArrestoColors.textPrimary,
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
@@ -329,7 +329,7 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
                           fontWeight: FontWeight.w700,
                           color: _secondsLeft < 300
                               ? ArrestoColors.red
-                              : ArrestoColors.ink,
+                              : ArrestoColors.textPrimary,
                         )),
                   ]),
                 ),
@@ -541,7 +541,7 @@ class _AssessmentQuizScreenState extends ConsumerState<AssessmentQuizScreen> {
   Widget _scaffold(String title, Widget body) => Column(children: [
     AppBar(
       backgroundColor: ArrestoColors.surface,
-      foregroundColor: ArrestoColors.ink,
+      foregroundColor: ArrestoColors.textPrimary,
       title:           Text(title, style: ArrestoText.h4()),
       leading: IconButton(
         icon:      const Icon(Icons.arrow_back_rounded),
@@ -734,7 +734,7 @@ class _ModeSwitcher extends StatelessWidget {
                         style: TextStyle(
                           fontSize:   13,
                           fontWeight: FontWeight.w600,
-                          color:      active ? ArrestoColors.ink : ArrestoColors.textMuted,
+                          color:      active ? ArrestoColors.textPrimary : ArrestoColors.textMuted,
                         )),
                   ],
                 ),

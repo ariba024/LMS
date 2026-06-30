@@ -8,6 +8,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
 import '../../../data/models/course.dart';
+import 'scene_video_dialog.dart';
 import 'script_review_dialog.dart';
 
 const _sarvamVoices = [
@@ -157,7 +158,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Started $count render job(s) · voice: $voice'),
-        backgroundColor: ArrestoColors.ink,
+        backgroundColor: ArrestoColors.surface,
       ));
       await _loadCourseDetail(scriptId);
     } catch (e) {
@@ -193,7 +194,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Started $count scene job(s)'),
-        backgroundColor: ArrestoColors.ink,
+        backgroundColor: ArrestoColors.surface,
       ));
       await _loadCourseDetail(scriptId);
     } catch (e) {
@@ -211,7 +212,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Audio generation started — Sarvam TTS is pre-warming all lessons'),
-        backgroundColor: ArrestoColors.ink,
+        backgroundColor: ArrestoColors.surface,
       ));
     } catch (e) {
       if (!mounted) return;
@@ -239,6 +240,33 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
         backgroundColor: ArrestoColors.red,
       ));
     }
+  }
+
+  Future<void> _watchScene({
+    required VideoRenderJob job,
+    required String lessonTitle,
+    required int wordCount,
+    required int sceneIndex,
+    required int totalScenes,
+  }) async {
+    final streamUrl = await VideoService.getStreamUrl(job.renderId);
+    final downloadUrl = await VideoService.getDownloadUrl(job.renderId);
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => SceneVideoDialog(
+        renderId: job.renderId,
+        streamUrl: streamUrl,
+        downloadUrl: downloadUrl,
+        lessonTitle: lessonTitle,
+        ttsEngine: job.ttsEngine,
+        voice: job.voice,
+        wordCount: wordCount,
+        sceneIndex: sceneIndex,
+        totalScenes: totalScenes,
+      ),
+    );
   }
 
   Future<void> _openReviewDialog(
@@ -312,7 +340,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: ArrestoColors.ink,
+              color: ArrestoColors.surface,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.videocam_rounded,
@@ -406,6 +434,19 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
         onRenderAll: () => _renderAll(courses[i].id),
         onGenerateAudio: () => _generateAudio(courses[i].id),
         onDeleteRender: (renderId) => _deleteRender(courses[i].id, renderId),
+        onWatch: (job, {
+          required String lessonTitle,
+          required int wordCount,
+          required int sceneIndex,
+          required int totalScenes,
+        }) =>
+            _watchScene(
+              job: job,
+              lessonTitle: lessonTitle,
+              wordCount: wordCount,
+              sceneIndex: sceneIndex,
+              totalScenes: totalScenes,
+            ),
         onRenderLesson: ({
           int? moduleNumber,
           int? lessonNumber,
@@ -468,6 +509,12 @@ class _CourseCard extends StatelessWidget {
   }) onReviewLesson;
   final VoidCallback onGenerateAudio;
   final void Function(String renderId) onDeleteRender;
+  final void Function(VideoRenderJob job, {
+    required String lessonTitle,
+    required int wordCount,
+    required int sceneIndex,
+    required int totalScenes,
+  }) onWatch;
 
   const _CourseCard({
     required this.course,
@@ -485,6 +532,7 @@ class _CourseCard extends StatelessWidget {
     required this.onReviewLesson,
     required this.onGenerateAudio,
     required this.onDeleteRender,
+    required this.onWatch,
   });
 
   /// Returns newest job per scene_index for this lessonRef.
@@ -675,12 +723,12 @@ class _CourseCard extends StatelessWidget {
                       horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: selected
-                        ? (isHeyGen ? ArrestoColors.orange : ArrestoColors.ink)
+                        ? (isHeyGen ? ArrestoColors.orange : ArrestoColors.surface)
                         : ArrestoColors.surface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: selected
-                          ? (isHeyGen ? ArrestoColors.orange : ArrestoColors.ink)
+                          ? (isHeyGen ? ArrestoColors.orange : ArrestoColors.amber)
                           : isHeyGen
                               ? ArrestoColors.orange.withValues(alpha: 0.35)
                               : ArrestoColors.lineStrong,
@@ -955,6 +1003,7 @@ class _CourseCard extends StatelessWidget {
             lessonRef: lessonRef,
             itemIndex: e.key,
           ),
+          onWatch: onWatch,
         );
       }).toList(),
     );
@@ -992,6 +1041,7 @@ class _CourseCard extends StatelessWidget {
               moduleNumber: mNum,
               lessonNumber: lNum,
             ),
+            onWatch: onWatch,
           );
         }),
       ],
@@ -1061,6 +1111,12 @@ class _CourseCard extends StatelessWidget {
     required int? moduleNumber,
     required int? lessonNumber,
     required VoidCallback onReview,
+    required void Function(VideoRenderJob job, {
+      required String lessonTitle,
+      required int wordCount,
+      required int sceneIndex,
+      required int totalScenes,
+    }) onWatch,
   }) {
     final scenesFromSplit = _splitIntoScenes(narration);
     final sceneJobs = _jobsForLesson(lessonRef);
@@ -1193,6 +1249,15 @@ class _CourseCard extends StatelessWidget {
                     lessonNumber: lessonNumber,
                     sceneIndex: i,
                   ),
+                  onWatch: (job != null && job.videoReady)
+                      ? () => onWatch(
+                          job,
+                          lessonTitle: title,
+                          wordCount: wordCount,
+                          sceneIndex: i,
+                          totalScenes: totalScenes,
+                        )
+                      : null,
                 );
               }),
             ),
@@ -1208,6 +1273,7 @@ class _CourseCard extends StatelessWidget {
     required int wordCount,
     required VideoRenderJob? job,
     required VoidCallback onRender,
+    required VoidCallback? onWatch,
     bool isLast = false,
   }) {
     final status = job?.status;
@@ -1261,6 +1327,38 @@ class _CourseCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Watch button — only when video is ready
+                if (onWatch != null) ...[
+                  GestureDetector(
+                    onTap: onWatch,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ArrestoColors.amber.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                            color:
+                                ArrestoColors.amber.withValues(alpha: 0.35)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_circle_outline_rounded,
+                              size: 13, color: ArrestoColors.amber),
+                          SizedBox(width: 3),
+                          Text('Watch',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: ArrestoColors.amber,
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 GestureDetector(
                   onTap: onRender,
                   child: Container(
@@ -1269,7 +1367,7 @@ class _CourseCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: status == 'completed'
                           ? ArrestoColors.green.withValues(alpha: 0.08)
-                          : ArrestoColors.ink.withValues(alpha: 0.06),
+                          : ArrestoColors.surfaceSoft,
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(
                         color: status == 'completed'

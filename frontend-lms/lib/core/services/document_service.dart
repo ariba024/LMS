@@ -178,4 +178,10 @@ class DocumentService {
         resp.headers.value('content-type') ?? 'application/octet-stream';
     return (bytes: Uint8List.fromList(resp.data as List<int>), mimeType: mime);
   }
+
+  /// Delete a document from the vector store, BM25 index, and uploads directory.
+  static Future<void> deleteDocument(String sourceFile) async {
+    final encoded = Uri.encodeComponent(sourceFile);
+    await apiClient.delete('/api/v1/documents/$encoded');
+  }
 }

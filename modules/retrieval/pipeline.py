@@ -69,10 +69,16 @@ class RetrievalPipeline:
         # Phase 1 — bge-m3 embedding model
         logger.info("Loading bge-m3 (cached after first download) ...")
         from sentence_transformers import SentenceTransformer
-        self._st_model = SentenceTransformer("BAAI/bge-m3")
-        dim = getattr(self._st_model, 'get_embedding_dimension',
-                      self._st_model.get_sentence_embedding_dimension)()
-        logger.info("bge-m3 ready — dim=%d", dim)
+        try:
+            import torch
+            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            self._device = "cpu"
+        logger.info("Using device: %s", self._device)
+        self._st_model = SentenceTransformer("BAAI/bge-m3", device=self._device)
+        get_dim = getattr(self._st_model, "get_embedding_dimension",
+                          self._st_model.get_sentence_embedding_dimension)
+        logger.info("bge-m3 ready — dim=%d on %s", get_dim(), self._device)
 
         # Phase 2 — BM25 sparse index (built once from all stored chunks)
         logger.info("Building BM25 index ...")
@@ -118,8 +124,9 @@ class RetrievalPipeline:
 
         logger.info("Dual-indexing %d chunks into bge-m3 store ...", len(chunks))
         texts      = [c.text for c in chunks]
+        batch_size = 32 if getattr(self, "_device", "cpu") == "cuda" else 8
         embeddings = self._st_model.encode(
-            texts, convert_to_numpy=True, show_progress_bar=False, batch_size=32,
+            texts, convert_to_numpy=True, show_progress_bar=False, batch_size=batch_size,
         ).tolist()
 
         self._bge_store.upsert(

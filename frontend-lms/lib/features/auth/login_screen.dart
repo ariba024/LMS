@@ -6,6 +6,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/circuit_board_background.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -57,7 +58,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
-      body: Center(
+      body: CircuitBoardBackground(
+        child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
@@ -70,26 +72,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: ArrestoColors.amber,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'A',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            color: ArrestoColors.ink,
-                          ),
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/images/arresto_logo.png',
+                        height: 48,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Text('ARRESTO LMS', style: ArrestoText.h3()),
                   ],
                 ),
                 const SizedBox(height: 32),
@@ -189,8 +180,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: auth.isLoading ? null : _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: ArrestoColors.orange,
-                              foregroundColor: Colors.white,
+                              backgroundColor: ArrestoColors.amber,
+                              foregroundColor: ArrestoColors.ink,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -202,12 +193,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: ArrestoColors.ink,
                                     ),
                                   )
                                 : Text(
                                     _isRegister ? 'Create account' : 'Sign in',
-                                    style: ArrestoText.bodyBold(color: Colors.white),
+                                    style: ArrestoText.bodyBold(color: ArrestoColors.ink),
                                   ),
                           ),
                         ),
@@ -229,7 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               }),
                               child: Text(
                                 _isRegister ? 'Sign in' : 'Register',
-                                style: ArrestoText.bodyMd(color: ArrestoColors.orange),
+                                style: ArrestoText.bodyMd(color: ArrestoColors.amber),
                               ),
                             ),
                           ],
@@ -243,11 +234,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
   Widget _label(String text) =>
-      Text(text, style: ArrestoText.label(color: ArrestoColors.ink));
+      Text(text, style: ArrestoText.label(color: ArrestoColors.textSecondary));
 
   Widget _field({
     required TextEditingController controller,
@@ -263,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,
-      style: ArrestoText.body(color: ArrestoColors.ink),
+      style: ArrestoText.body(color: ArrestoColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: ArrestoText.body(),
@@ -282,7 +274,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: ArrestoColors.orange, width: 1.5),
+          borderSide: const BorderSide(color: ArrestoColors.amber, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

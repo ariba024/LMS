@@ -195,7 +195,7 @@ class _CertificateCardState extends State<_CertificateCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('ARRESTO LMS',
-                        style: ArrestoText.eyebrow(color: ArrestoColors.ink)
+                        style: ArrestoText.eyebrow(color: ArrestoColors.textPrimary)
                             .copyWith(letterSpacing: 1.5)),
                     Text('Accredited Training Provider',
                         style: ArrestoText.xs()),
@@ -281,7 +281,7 @@ class _CertificateCardState extends State<_CertificateCard> {
       children: [
         Text(label, style: ArrestoText.xs()),
         Text(value,
-            style: ArrestoText.small(color: ArrestoColors.ink)
+            style: ArrestoText.small(color: ArrestoColors.textPrimary)
                 .copyWith(fontWeight: FontWeight.w600)),
       ],
     );

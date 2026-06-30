@@ -509,6 +509,8 @@ class _StepRequirements extends StatelessWidget {
                     const SizedBox(height: 5),
                     DropdownButtonFormField<String>(
                       value: audience,
+                      dropdownColor: ArrestoColors.surface,
+                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
                       decoration: const InputDecoration(),
                       items: const [
                         'Construction workers',
@@ -516,7 +518,11 @@ class _StepRequirements extends StatelessWidget {
                         'Safety officers',
                         'All workers',
                       ]
-                          .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                          .map((o) => DropdownMenuItem(
+                              value: o,
+                              child: Text(o,
+                                  style: ArrestoText.body(
+                                      color: ArrestoColors.textPrimary))))
                           .toList(),
                       onChanged: onAudienceChanged,
                     ),
@@ -567,6 +573,8 @@ class _StepRequirements extends StatelessWidget {
                     const SizedBox(height: 5),
                     DropdownButtonFormField<String>(
                       value: courseLength,
+                      dropdownColor: ArrestoColors.surface,
+                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
                       decoration: const InputDecoration(),
                       items: const [
                         '15-20 minutes',
@@ -575,7 +583,11 @@ class _StepRequirements extends StatelessWidget {
                         '2-3 hours',
                         '3+ hours',
                       ]
-                          .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                          .map((o) => DropdownMenuItem(
+                              value: o,
+                              child: Text(o,
+                                  style: ArrestoText.body(
+                                      color: ArrestoColors.textPrimary))))
                           .toList(),
                       onChanged: (v) {
                         if (v != null) onCourseLengthChanged(v);
@@ -593,6 +605,8 @@ class _StepRequirements extends StatelessWidget {
                     const SizedBox(height: 5),
                     DropdownButtonFormField<String>(
                       value: language,
+                      dropdownColor: ArrestoColors.surface,
+                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
                       decoration: const InputDecoration(),
                       items: const [
                         'English',
@@ -607,7 +621,11 @@ class _StepRequirements extends StatelessWidget {
                         'Punjabi',
                         'Odia',
                       ]
-                          .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                          .map((o) => DropdownMenuItem(
+                              value: o,
+                              child: Text(o,
+                                  style: ArrestoText.body(
+                                      color: ArrestoColors.textPrimary))))
                           .toList(),
                       onChanged: (v) {
                         if (v != null) onLanguageChanged(v);
@@ -1749,7 +1767,7 @@ class _StepLanguageState extends State<_StepLanguage> {
                                       ? FontWeight.w700
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? ArrestoColors.ink
+                                      ? ArrestoColors.amberStrong
                                       : ArrestoColors.textSecondary,
                                 ),
                                 overflow: TextOverflow.ellipsis),
@@ -2694,9 +2712,15 @@ class _StepPublish extends StatelessWidget {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: assignLabel,
+            dropdownColor: ArrestoColors.surface,
+            style: ArrestoText.body(color: ArrestoColors.textPrimary),
             decoration: const InputDecoration(),
             items: _assignLabels
-                .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                .map((l) => DropdownMenuItem(
+                    value: l,
+                    child: Text(l,
+                        style: ArrestoText.body(
+                            color: ArrestoColors.textPrimary))))
                 .toList(),
             onChanged: (label) {
               if (label == null) return;
@@ -2719,7 +2743,7 @@ class _StepPublish extends StatelessWidget {
         children: [
           Expanded(
               child: Text(label,
-                  style: ArrestoText.body(color: ArrestoColors.ink))),
+                  style: ArrestoText.body(color: ArrestoColors.textPrimary))),
           Switch(
             value: value,
             onChanged: onChanged,

@@ -23,7 +23,7 @@ class GamificationCoursesScreen extends ConsumerWidget {
         backgroundColor: ArrestoColors.surface,
         elevation: 0,
         title: Text('Gamification',
-            style: ArrestoText.base(color: ArrestoColors.ink)
+            style: ArrestoText.base(color: ArrestoColors.textPrimary)
                 .copyWith(fontWeight: FontWeight.w700)),
       ),
       body: SingleChildScrollView(
@@ -169,7 +169,7 @@ class _CourseCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(course.title,
-                      style: ArrestoText.base(color: ArrestoColors.ink)
+                      style: ArrestoText.base(color: ArrestoColors.textPrimary)
                           .copyWith(fontWeight: FontWeight.w700),
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 2),
@@ -182,14 +182,15 @@ class _CourseCard extends StatelessWidget {
             FilledButton(
               onPressed: open,
               style: FilledButton.styleFrom(
-                backgroundColor: ArrestoColors.ink,
+                backgroundColor: ArrestoColors.amber,
+                foregroundColor: ArrestoColors.ink,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
               child: Text('Play',
-                  style: ArrestoText.small(color: Colors.white)
+                  style: ArrestoText.small(color: ArrestoColors.ink)
                       .copyWith(fontWeight: FontWeight.w700)),
             ),
           ],

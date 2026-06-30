@@ -252,7 +252,7 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
                 ]),
                 const SizedBox(height: 16),
                 Row(children: [
-                  _statChip('${all.length}', 'Total', ArrestoColors.ink),
+                  _statChip('${all.length}', 'Total', ArrestoColors.textSecondary),
                   const SizedBox(width: 8),
                   _statChip(
                       '${all.where((c) => c.status == 'published').length}',
@@ -407,12 +407,12 @@ class _AllCoursesScreenState extends ConsumerState<AllCoursesScreen> {
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? ArrestoColors.ink : Colors.transparent,
+          color: active ? ArrestoColors.amber : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
         ),
         child: Icon(icon,
             size: 16,
-            color: active ? Colors.white : ArrestoColors.textMuted),
+            color: active ? ArrestoColors.ink : ArrestoColors.textMuted),
       ),
     );
   }
@@ -711,7 +711,7 @@ class _TableRow extends StatelessWidget {
           ),
           Expanded(
               child: Text('${course.lessons}',
-                  style: ArrestoText.body(color: ArrestoColors.ink))),
+                  style: ArrestoText.body(color: ArrestoColors.textPrimary))),
           Expanded(child: StatusBadge(status: course.status)),
           Expanded(
               child: Text('${course.mins} min', style: ArrestoText.small())),
@@ -764,8 +764,9 @@ class _BulkActionBar extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: ArrestoColors.ink,
+        color: ArrestoColors.surface,
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: ArrestoColors.amber),
       ),
       child: Row(children: [
         Text('$count selected',
@@ -1137,7 +1138,7 @@ class _AssessmentResultsSheetState extends State<_AssessmentResultsSheet> {
               const SizedBox(width: 8),
               _chip('$failed Failed', ArrestoColors.red),
               const SizedBox(width: 8),
-              _chip('${_results!.length} Total', ArrestoColors.ink),
+              _chip('${_results!.length} Total', ArrestoColors.textSecondary),
             ]),
             const SizedBox(height: 12),
             Flexible(

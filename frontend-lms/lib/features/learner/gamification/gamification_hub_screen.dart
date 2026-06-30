@@ -76,7 +76,7 @@ class _GamificationHubScreenState extends State<GamificationHubScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Gamification',
-                style: ArrestoText.base(color: ArrestoColors.ink)
+                style: ArrestoText.base(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             Text(widget.courseTitle,
                 style: ArrestoText.xs(color: ArrestoColors.textMuted)),
@@ -328,7 +328,7 @@ class _ActivityCard extends StatelessWidget {
                   Row(
                     children: [
                       Text(title,
-                          style: ArrestoText.base(color: ArrestoColors.ink)
+                          style: ArrestoText.base(color: ArrestoColors.textPrimary)
                               .copyWith(fontWeight: FontWeight.w700)),
                       if (badge != null) ...[
                         const SizedBox(width: 8),

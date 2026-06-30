@@ -552,7 +552,7 @@ class _RightSidebar extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: ArrestoColors.amberSoft,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(

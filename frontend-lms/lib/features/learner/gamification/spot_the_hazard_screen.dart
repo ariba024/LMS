@@ -216,7 +216,7 @@ class _SpotTheHazardScreenState extends State<SpotTheHazardScreen> {
           backgroundColor: ArrestoColors.surface,
           elevation: 0,
           title: Text('Spot the Hazard',
-              style: ArrestoText.base(color: ArrestoColors.ink)
+              style: ArrestoText.base(color: ArrestoColors.textPrimary)
                   .copyWith(fontWeight: FontWeight.w700)),
         ),
         body: Center(
@@ -229,7 +229,7 @@ class _SpotTheHazardScreenState extends State<SpotTheHazardScreen> {
                     size: 48, color: ArrestoColors.red),
                 const SizedBox(height: 12),
                 Text('Something went wrong',
-                    style: ArrestoText.lg(color: ArrestoColors.ink)
+                    style: ArrestoText.lg(color: ArrestoColors.textPrimary)
                         .copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(_error!,
@@ -240,7 +240,8 @@ class _SpotTheHazardScreenState extends State<SpotTheHazardScreen> {
                 FilledButton(
                   onPressed: _load,
                   style: FilledButton.styleFrom(
-                      backgroundColor: ArrestoColors.ink),
+                      backgroundColor: ArrestoColors.amber,
+                      foregroundColor: ArrestoColors.ink),
                   child: const Text('Retry'),
                 ),
               ],
@@ -268,7 +269,7 @@ class _SpotTheHazardScreenState extends State<SpotTheHazardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Spot the Hazard',
-                style: ArrestoText.base(color: ArrestoColors.ink)
+                style: ArrestoText.base(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             Text(
               'Scenario ${_sessionIndex + 1}/${_sessions.length} · ${s.title}',
@@ -349,7 +350,7 @@ class _IntroView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(session.title,
-                    style: ArrestoText.xl(color: ArrestoColors.ink)
+                    style: ArrestoText.xl(color: ArrestoColors.textPrimary)
                         .copyWith(fontWeight: FontWeight.w700),
                     textAlign: TextAlign.center),
                 const SizedBox(height: 8),
@@ -377,13 +378,14 @@ class _IntroView extends StatelessWidget {
                   child: FilledButton(
                     onPressed: onStart,
                     style: FilledButton.styleFrom(
-                      backgroundColor: ArrestoColors.ink,
+                      backgroundColor: ArrestoColors.amber,
+                      foregroundColor: ArrestoColors.ink,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     child: Text('Start Spotting',
-                        style: ArrestoText.base(color: Colors.white)
+                        style: ArrestoText.base(color: ArrestoColors.ink)
                             .copyWith(fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -540,7 +542,7 @@ class _PhotoScene extends StatelessWidget {
                       session.imageUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stack) => Container(
-                        color: ArrestoColors.ink,
+                        color: ArrestoColors.surface,
                         child: const Center(
                           child: Icon(Icons.broken_image_rounded,
                               color: Colors.white54, size: 48),
@@ -865,7 +867,7 @@ class _QuizView extends StatelessWidget {
               boxShadow: ArrestoColors.sh1,
             ),
             child: Text(q.question,
-                style: ArrestoText.lg(color: ArrestoColors.ink)
+                style: ArrestoText.lg(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w600, height: 1.5)),
           ),
           const SizedBox(height: 16),
@@ -971,7 +973,8 @@ class _QuizView extends StatelessWidget {
               child: FilledButton(
                 onPressed: onNext,
                 style: FilledButton.styleFrom(
-                  backgroundColor: ArrestoColors.ink,
+                  backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -980,7 +983,7 @@ class _QuizView extends StatelessWidget {
                   quizIndex < session.quizQuestions.length - 1
                       ? 'Next Question'
                       : 'See Results',
-                  style: ArrestoText.base(color: Colors.white)
+                  style: ArrestoText.base(color: ArrestoColors.ink)
                       .copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -1035,7 +1038,7 @@ class _ResultView extends StatelessWidget {
             child: Column(
               children: [
                 Text('Great Work!',
-                    style: ArrestoText.xl(color: ArrestoColors.ink)
+                    style: ArrestoText.xl(color: ArrestoColors.textPrimary)
                         .copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Text(session.title,
@@ -1071,14 +1074,15 @@ class _ResultView extends StatelessWidget {
                   child: FilledButton(
                     onPressed: onNext,
                     style: FilledButton.styleFrom(
-                      backgroundColor: ArrestoColors.ink,
+                      backgroundColor: ArrestoColors.amber,
+                      foregroundColor: ArrestoColors.ink,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     child: Text(
                       isLastSession ? 'Finish' : 'Next Scenario',
-                      style: ArrestoText.base(color: Colors.white)
+                      style: ArrestoText.base(color: ArrestoColors.ink)
                           .copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -1117,7 +1121,7 @@ class _ResultView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(reg.label,
-                            style: ArrestoText.small(color: ArrestoColors.ink)
+                            style: ArrestoText.small(color: ArrestoColors.textPrimary)
                                 .copyWith(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
                         Text(reg.note,
@@ -1175,7 +1179,7 @@ class _NoSessionsView extends StatelessWidget {
         backgroundColor: ArrestoColors.surface,
         elevation: 0,
         title: Text('Spot the Hazard',
-            style: ArrestoText.base(color: ArrestoColors.ink)
+            style: ArrestoText.base(color: ArrestoColors.textPrimary)
                 .copyWith(fontWeight: FontWeight.w700)),
       ),
       body: Center(
@@ -1196,7 +1200,7 @@ class _NoSessionsView extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text('No Hazard Scenarios Yet',
-                  style: ArrestoText.xl(color: ArrestoColors.ink)
+                  style: ArrestoText.xl(color: ArrestoColors.textPrimary)
                       .copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
@@ -1210,7 +1214,8 @@ class _NoSessionsView extends StatelessWidget {
                 icon: const Icon(Icons.auto_awesome_rounded),
                 label: const Text('Generate with AI'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: ArrestoColors.ink,
+                  backgroundColor: ArrestoColors.amber,
+                  foregroundColor: ArrestoColors.ink,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   shape: RoundedRectangleBorder(

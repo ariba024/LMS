@@ -230,7 +230,7 @@ class _ProfileSettings extends StatelessWidget {
   Widget _toggle(String label, bool value) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: ArrestoText.body(color: ArrestoColors.ink))),
+        Expanded(child: Text(label, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
         Switch(
           value: value,
           onChanged: (_) {},
@@ -260,7 +260,7 @@ class _AISettings extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.ink))),
+                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
                     Switch(
                       value: item.$2,
                       onChanged: (_) {},
@@ -294,7 +294,7 @@ class _NotificationSettings extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.ink))),
+                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
                     Switch(
                       value: item.$2,
                       onChanged: (_) {},
@@ -630,7 +630,12 @@ class _KnowledgeBaseSettingsState
                             '${docs.fold(0, (s, d) => s + d.chunkCount)} total chunks',
                             style: ArrestoText.small()),
                       ),
-                      ...docs.map((doc) => _DocumentRow(doc: doc)),
+                      ...docs.map((doc) => _DocumentRow(
+                        doc: doc,
+                        onDeleted: () => ref
+                            .read(documentsNotifierProvider.notifier)
+                            .refresh(),
+                      )),
                     ],
                   );
                 },
@@ -716,7 +721,8 @@ class _JobRow extends StatelessWidget {
 
 class _DocumentRow extends StatefulWidget {
   final DocumentInfo doc;
-  const _DocumentRow({required this.doc});
+  final VoidCallback onDeleted;
+  const _DocumentRow({required this.doc, required this.onDeleted});
 
   @override
   State<_DocumentRow> createState() => _DocumentRowState();
@@ -724,12 +730,64 @@ class _DocumentRow extends StatefulWidget {
 
 class _DocumentRowState extends State<_DocumentRow> {
   bool _openingFile = false;
+  bool _deleting = false;
 
   void _viewText() {
     showDialog(
       context: context,
       builder: (_) => _TextViewerDialog(doc: widget.doc),
     );
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ArrestoColors.surface,
+        title: Text('Remove document?', style: ArrestoText.h4()),
+        content: Text(
+          'This will permanently remove "${widget.doc.displayName}" and all '
+          'its indexed chunks from the knowledge base.',
+          style: ArrestoText.body(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: ArrestoColors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await DocumentService.deleteDocument(widget.doc.sourceFile);
+      if (!mounted) return;
+      widget.onDeleted();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('"${widget.doc.displayName}" removed from knowledge base.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   Future<void> _openFile() async {
@@ -813,6 +871,22 @@ class _DocumentRowState extends State<_DocumentRow> {
             color: ArrestoColors.textMuted,
             tooltip: 'Open original file',
             onPressed: _openFile,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        if (_deleting)
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.red, strokeWidth: 2),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            color: ArrestoColors.red,
+            tooltip: 'Remove from knowledge base',
+            onPressed: _delete,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),

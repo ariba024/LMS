@@ -92,7 +92,7 @@ class _AssessmentFlashcardsScreenState
         return Column(children: [
           AppBar(
             backgroundColor: ArrestoColors.surface,
-            foregroundColor: ArrestoColors.ink,
+            foregroundColor: ArrestoColors.textPrimary,
             automaticallyImplyLeading: false,
             title: Row(children: [
               IconButton(
@@ -230,7 +230,7 @@ class _AssessmentFlashcardsScreenState
     return Column(children: [
       AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         title: Text(title, style: ArrestoText.h4()),
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
@@ -253,8 +253,9 @@ class _FrontCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: ArrestoColors.ink,
+        color: ArrestoColors.surface,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: ArrestoColors.cardBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.18),
