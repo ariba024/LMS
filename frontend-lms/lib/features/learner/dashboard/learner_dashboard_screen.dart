@@ -509,37 +509,85 @@ class _RightSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // AI promo
+        // AI promo — MR Solve style
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: const Color(0xFF191200),
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: ArrestoColors.amber.withValues(alpha: 0.45), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: ArrestoColors.amber.withValues(alpha: 0.10),
+                blurRadius: 24,
+                spreadRadius: 3,
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const ArrestoAiLogo(size: 32),
-                  const SizedBox(width: 8),
-                  Text('Arresto AI',
-                      style: ArrestoText.h4(color: Colors.white)),
+                  const ArrestoAiLogo(size: 44),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Talk to Arresto AI',
+                            style: ArrestoText.h4(color: Colors.white)),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: ArrestoColors.green,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text('AI SAFETY EXPERT · 24/7',
+                                style: ArrestoText.xs(
+                                        color: ArrestoColors.textMuted2)
+                                    .copyWith(letterSpacing: 0.5)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
-                'Ask any question about fall protection. Available 24/7.',
-                style: ArrestoText.small(color: Colors.white60),
+                'Click Start and ask anything about safety, compliance or risk.',
+                style: ArrestoText.small(color: ArrestoColors.textMuted),
               ),
-              const SizedBox(height: 14),
-              ArrestoButton(
-                label: 'Ask Arresto AI',
-                onPressed: () => showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => const _AISheet(),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const _AISheet(),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_rounded,
+                      size: 15, color: Color(0xFF1B1B1D)),
+                  label: const Text('Start a Chat',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1B1B1D))),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ArrestoColors.amber,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ),
             ],

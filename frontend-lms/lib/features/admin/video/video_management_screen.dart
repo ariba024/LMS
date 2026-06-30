@@ -157,7 +157,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Started $count render job(s) · voice: $voice'),
-        backgroundColor: ArrestoColors.ink,
+        backgroundColor: ArrestoColors.amber,
       ));
       await _loadCourseDetail(scriptId);
     } catch (e) {
@@ -193,7 +193,7 @@ class _VideoManagementScreenState extends State<VideoManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Started $count scene job(s)'),
-        backgroundColor: ArrestoColors.ink,
+        backgroundColor: ArrestoColors.amber,
       ));
       await _loadCourseDetail(scriptId);
     } catch (e) {

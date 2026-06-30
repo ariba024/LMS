@@ -55,15 +55,6 @@ class _CourseGeneratorWizardState
   static const _langCode = {
     'English':   'en',
     'Hindi':     'hi',
-    'Tamil':     'ta',
-    'Telugu':    'te',
-    'Kannada':   'kn',
-    'Malayalam': 'ml',
-    'Bengali':   'bn',
-    'Marathi':   'mr',
-    'Gujarati':  'gu',
-    'Punjabi':   'pa',
-    'Odia':      'od',
   };
 
   // Step 8: Publish settings (lifted so the bottom-bar button can read them)
@@ -595,15 +586,6 @@ class _StepRequirements extends StatelessWidget {
                       items: const [
                         'English',
                         'Hindi',
-                        'Tamil',
-                        'Telugu',
-                        'Kannada',
-                        'Malayalam',
-                        'Bengali',
-                        'Marathi',
-                        'Gujarati',
-                        'Punjabi',
-                        'Odia',
                       ]
                           .map((o) => DropdownMenuItem(value: o, child: Text(o)))
                           .toList(),
@@ -1603,15 +1585,6 @@ class _StepLanguageState extends State<_StepLanguage> {
   static const _languages = [
     ('English',   '🇮🇳', 'en'),
     ('Hindi',     '🇮🇳', 'hi'),
-    ('Tamil',     '🇮🇳', 'ta'),
-    ('Telugu',    '🇮🇳', 'te'),
-    ('Kannada',   '🇮🇳', 'kn'),
-    ('Malayalam', '🇮🇳', 'ml'),
-    ('Bengali',   '🇮🇳', 'bn'),
-    ('Marathi',   '🇮🇳', 'mr'),
-    ('Gujarati',  '🇮🇳', 'gu'),
-    ('Punjabi',   '🇮🇳', 'pa'),
-    ('Odia',      '🇮🇳', 'od'),
   ];
 
   static const _voices = [

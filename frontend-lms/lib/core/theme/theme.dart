@@ -6,25 +6,26 @@ import 'colors.dart';
 ThemeData buildArrestoTheme() {
   return ThemeData(
     useMaterial3: true,
+    brightness: Brightness.dark,
     scaffoldBackgroundColor: ArrestoColors.background,
-    colorScheme: ColorScheme.light(
+    colorScheme: ColorScheme.dark(
       primary: ArrestoColors.amber,
       secondary: ArrestoColors.orange,
       surface: ArrestoColors.surface,
       error: ArrestoColors.red,
-      onPrimary: ArrestoColors.ink,
+      onPrimary: const Color(0xFF1B1B1D), // dark text on amber CTA buttons
       onSecondary: Colors.white,
       onSurface: ArrestoColors.textPrimary,
       onError: Colors.white,
       outline: ArrestoColors.cardBorder,
     ),
-    textTheme: GoogleFonts.interTextTheme().copyWith(
+    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
       displayLarge: GoogleFonts.inter(
-          fontSize: 26, fontWeight: FontWeight.w800, color: ArrestoColors.ink),
+          fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white),
       headlineMedium: GoogleFonts.inter(
-          fontSize: 21, fontWeight: FontWeight.w800, color: ArrestoColors.ink),
+          fontSize: 21, fontWeight: FontWeight.w800, color: Colors.white),
       titleLarge: GoogleFonts.inter(
-          fontSize: 16, fontWeight: FontWeight.w700, color: ArrestoColors.ink),
+          fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
       bodyLarge: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w400,
@@ -48,7 +49,7 @@ ThemeData buildArrestoTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: ArrestoColors.surface,
+      fillColor: ArrestoColors.surfaceSoft,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       border: OutlineInputBorder(
@@ -57,7 +58,7 @@ ThemeData buildArrestoTheme() {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: ArrestoColors.lineStrong, width: 1.5),
+        borderSide: const BorderSide(color: ArrestoColors.line, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -74,9 +75,15 @@ ThemeData buildArrestoTheme() {
       titleTextStyle: GoogleFonts.inter(
         fontSize: 16,
         fontWeight: FontWeight.w700,
-        color: ArrestoColors.ink,
+        color: Colors.white,
       ),
-      iconTheme: const IconThemeData(color: ArrestoColors.ink),
+      iconTheme: const IconThemeData(color: Colors.white),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: ArrestoColors.amber,
+        foregroundColor: const Color(0xFF1B1B1D),
+      ),
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {

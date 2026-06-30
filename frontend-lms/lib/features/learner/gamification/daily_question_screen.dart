@@ -358,7 +358,7 @@ class _QuestionView extends StatelessWidget {
               child: FilledButton(
                 onPressed: onSubmit,
                 style: FilledButton.styleFrom(
-                  backgroundColor: ArrestoColors.ink,
+                  backgroundColor: ArrestoColors.amber,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -402,7 +402,7 @@ class _ErrorView extends StatelessWidget {
             FilledButton(
               onPressed: onRetry,
               style: FilledButton.styleFrom(
-                backgroundColor: ArrestoColors.ink,
+                backgroundColor: ArrestoColors.amber,
               ),
               child: const Text('Retry'),
             ),

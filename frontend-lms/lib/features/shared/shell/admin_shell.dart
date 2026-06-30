@@ -43,26 +43,18 @@ class _AIFab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.ink,
+      backgroundColor: ArrestoColors.amber,
       onPressed: () => showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => const ArrestoAIPanel(),
       ),
-      icon: Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(
-          color: ArrestoColors.amber,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.auto_awesome_rounded,
-            size: 13, color: ArrestoColors.ink),
-      ),
+      icon: const Icon(Icons.auto_awesome_rounded,
+          size: 18, color: Color(0xFF1B1B1D)),
       label: Text('Arresto AI',
-          style: ArrestoText.small(color: Colors.white)
-              .copyWith(fontWeight: FontWeight.w600)),
+          style: ArrestoText.small(color: const Color(0xFF1B1B1D))
+              .copyWith(fontWeight: FontWeight.w700)),
     );
   }
 }

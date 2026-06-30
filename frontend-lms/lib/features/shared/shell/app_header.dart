@@ -278,7 +278,7 @@ class _ArrestoLogo extends StatelessWidget {
                 style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
-                    color: ArrestoColors.ink)),
+                    color: Color(0xFF1B1B1D))),
           ),
         ),
         const SizedBox(width: 8),
@@ -335,7 +335,7 @@ class _RoleSwitcher extends ConsumerWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? ArrestoColors.ink : Colors.transparent,
+          color: active ? ArrestoColors.amber : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -343,7 +343,7 @@ class _RoleSwitcher extends ConsumerWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : ArrestoColors.textMuted,
+            color: active ? const Color(0xFF1B1B1D) : ArrestoColors.textMuted,
           ),
         ),
       ),

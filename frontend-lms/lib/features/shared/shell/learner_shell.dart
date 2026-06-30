@@ -142,7 +142,7 @@ class _LearnerSidebar extends ConsumerWidget {
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF92400E))),
+                            color: ArrestoColors.amber)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -315,17 +315,18 @@ class _AIFab extends StatelessWidget {
     }
 
     return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.ink,
+      backgroundColor: ArrestoColors.amber,
       onPressed: () => showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => const ArrestoAIPanel(),
       ),
-      icon: const ArrestoAiLogo(size: 24),
+      icon: const Icon(Icons.auto_awesome_rounded,
+          size: 18, color: Color(0xFF1B1B1D)),
       label: Text('Arresto AI',
-          style: ArrestoText.small(color: Colors.white)
-              .copyWith(fontWeight: FontWeight.w600)),
+          style: ArrestoText.small(color: const Color(0xFF1B1B1D))
+              .copyWith(fontWeight: FontWeight.w700)),
     );
   }
 }
