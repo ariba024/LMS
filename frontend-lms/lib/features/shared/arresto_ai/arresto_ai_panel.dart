@@ -12,6 +12,7 @@ import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_robot_mascot.dart';
 
 /// Context about the lesson the learner is currently watching, passed into the
 /// AI companion so it can answer about *this* lesson and the current section.
@@ -897,8 +898,8 @@ class _EmptyState extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  const ArrestoAiLogo(size: 72),
-                  const SizedBox(height: 16),
+                  const ArrestoRobotMascot(size: 130),
+                  const SizedBox(height: 14),
                   Text(
                     lc != null
                         ? 'Ask me about\n"${lc.lessonTitle}"'

@@ -12,6 +12,7 @@ import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_robot_mascot.dart';
 import '../../../data/providers/api_providers.dart';
 import '../../../data/models/course.dart';
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
@@ -511,60 +512,34 @@ class _RightSidebar extends StatelessWidget {
 
         // AI promo — MR Solve style
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
           decoration: BoxDecoration(
             color: const Color(0xFF191200),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
                 color: ArrestoColors.amber.withValues(alpha: 0.45), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: ArrestoColors.amber.withValues(alpha: 0.10),
-                blurRadius: 24,
-                spreadRadius: 3,
+                color: ArrestoColors.amber.withValues(alpha: 0.12),
+                blurRadius: 28,
+                spreadRadius: 4,
               ),
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const ArrestoAiLogo(size: 44),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Talk to Arresto AI',
-                            style: ArrestoText.h4(color: Colors.white)),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: ArrestoColors.green,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Text('AI SAFETY EXPERT · 24/7',
-                                style: ArrestoText.xs(
-                                        color: ArrestoColors.textMuted2)
-                                    .copyWith(letterSpacing: 0.5)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              const ArrestoRobotMascot(size: 110),
               const SizedBox(height: 12),
+              Text('Talk to Arresto AI',
+                  style: ArrestoText.h3(color: Colors.white)
+                      .copyWith(fontSize: 17, fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 6),
               Text(
                 'Click Start and ask anything about safety, compliance or risk.',
                 style: ArrestoText.small(color: ArrestoColors.textMuted),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -584,7 +559,7 @@ class _RightSidebar extends StatelessWidget {
                           color: Color(0xFF1B1B1D))),
                   style: FilledButton.styleFrom(
                     backgroundColor: ArrestoColors.amber,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
