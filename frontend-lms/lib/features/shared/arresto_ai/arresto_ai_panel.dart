@@ -11,8 +11,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
-import '../../../core/widgets/arresto_robot_mascot.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 
 /// Context about the lesson the learner is currently watching, passed into the
 /// AI companion so it can answer about *this* lesson and the current section.
@@ -498,7 +497,7 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
           ),
           child: Row(
             children: [
-              const ArrestoAiLogo(size: 36),
+              const ArrestoAiAvatar(size: 38, circle: true),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -898,7 +897,7 @@ class _EmptyState extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  const ArrestoRobotMascot(size: 130),
+                  const ArrestoAiMascot(size: 148),
                   const SizedBox(height: 14),
                   Text(
                     lc != null
@@ -998,7 +997,7 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!msg.isUser) ...[
-              const ArrestoAiLogo(size: 28),
+              const ArrestoAiAvatar(size: 28, circle: true),
               const SizedBox(width: 8),
             ],
             Flexible(
@@ -1158,7 +1157,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const ArrestoAiLogo(size: 28),
+        const ArrestoAiAvatar(size: 28, circle: true),
         const SizedBox(width: 8),
         Container(
           margin: const EdgeInsets.only(bottom: 10),

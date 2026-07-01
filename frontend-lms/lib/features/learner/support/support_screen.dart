@@ -7,7 +7,7 @@ import '../../../core/widgets/button.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/badge.dart';
 import '../../../core/widgets/section_header.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import '../../../data/providers/app_state.dart';
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
 
@@ -257,15 +257,17 @@ class _SidePanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: ArrestoColors.ink,
+            color: const Color(0xFF191200),
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: ArrestoColors.amber.withValues(alpha: 0.45), width: 1.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const ArrestoAiLogo(size: 28),
+                  const ArrestoAiAvatar(size: 32, circle: true),
                   const SizedBox(width: 8),
                   Text('Try Arresto AI first',
                       style: ArrestoText.bodyBold(color: Colors.white)),
@@ -273,7 +275,7 @@ class _SidePanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text('Get instant answers to your learning questions.',
-                  style: ArrestoText.small(color: Colors.white60)),
+                  style: ArrestoText.small(color: ArrestoColors.textMuted)),
               const SizedBox(height: 12),
               ArrestoButton(
                 label: 'Ask AI',

@@ -38,7 +38,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 
 // ── Public model ──────────────────────────────────────────────────────────────
 enum QuestionType { multipleChoice, trueFalse, voice, text }
@@ -371,7 +371,7 @@ class _QuestionCardState extends State<_QuestionCard> {
       child: Column(
         children: [
           Row(children: [
-            const ArrestoAiLogo(size: 38),
+            const ArrestoAiAvatar(size: 38, circle: true),
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

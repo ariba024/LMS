@@ -11,8 +11,7 @@ import '../../../core/widgets/progress_bar.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
-import '../../../core/widgets/arresto_robot_mascot.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import '../../../data/providers/api_providers.dart';
 import '../../../data/models/course.dart';
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
@@ -529,7 +528,7 @@ class _RightSidebar extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const ArrestoRobotMascot(size: 110),
+              const ArrestoAiMascot(size: 124),
               const SizedBox(height: 12),
               Text('Talk to Arresto AI',
                   style: ArrestoText.h3(color: Colors.white)
