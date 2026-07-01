@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/colors.dart';
-import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/arresto_brand_logo.dart';
+import '../../core/widgets/arresto_circuit_background.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -56,8 +57,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: Center(
+      backgroundColor: Colors.transparent,
+      body: ArrestoCircuitBackground(
+        child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
@@ -67,39 +69,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Logo
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: ArrestoColors.amber,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'A',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            color: ArrestoColors.ink,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text('ARRESTO LMS', style: ArrestoText.h3()),
-                  ],
-                ),
+                const Center(child: ArrestoBrandLogo()),
                 const SizedBox(height: 32),
 
                 // Card
                 Container(
                   decoration: BoxDecoration(
-                    color: ArrestoColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: ArrestoColors.cardBorder),
+                    color: ArrestoColors.surface.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: ArrestoColors.amber.withValues(alpha: 0.18)),
                     boxShadow: ArrestoColors.sh4,
                   ),
                   padding: const EdgeInsets.all(28),
@@ -242,6 +221,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

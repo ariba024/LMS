@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/avatar.dart';
+import '../../../core/widgets/arresto_brand_logo.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/providers/api_providers.dart';
@@ -52,11 +54,14 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
     final notifsAsync = ref.watch(notificationsProvider(recipientId));
     final unread = notifsAsync.valueOrNull?.where((n) => !n.read).length ?? 0;
 
-    return Container(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       height: ArrestoSpacing.headerHeight,
-      decoration: const BoxDecoration(
-        color: ArrestoColors.surface,
-        border: Border(bottom: BorderSide(color: ArrestoColors.cardBorder)),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.55),
+        border: const Border(bottom: BorderSide(color: ArrestoColors.cardBorder)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -168,6 +173,8 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 }
@@ -264,38 +271,7 @@ class _ProfileDropdown extends ConsumerWidget {
 class _ArrestoLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: ArrestoColors.amber,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: const Center(
-            child: Text('A',
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: Color(0xFF1B1B1D))),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('ARRESTO',
-                style: ArrestoText.eyebrow(color: ArrestoColors.ink)
-                    .copyWith(letterSpacing: 2)),
-            Text('LMS',
-                style: ArrestoText.xs(color: ArrestoColors.textMuted)
-                    .copyWith(letterSpacing: 1)),
-          ],
-        ),
-      ],
-    );
+    return const ArrestoBrandLogo();
   }
 }
 

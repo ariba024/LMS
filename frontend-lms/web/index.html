@@ -18,21 +18,62 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Arresto LMS — Transform Safety Digitally.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="arresto_lms">
+  <meta name="apple-mobile-web-app-title" content="Arresto LMS">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>arresto_lms</title>
+  <title>Arresto LMS</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Branded loading / splash screen (dark — never on a bright background) */
+    #arresto-splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      background: radial-gradient(1200px 600px at 50% 38%, #17171b 0%, #0e0e10 60%, #0b0b0d 100%);
+      z-index: 999999;
+      transition: opacity .45s ease;
+    }
+    #arresto-splash.arresto-hide { opacity: 0; pointer-events: none; }
+    /* EXACT uploaded logo — contained, never cropped/stretched/recolored */
+    #arresto-splash img {
+      height: 48px;
+      width: auto;
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
+    }
+    #arresto-splash .arresto-spin {
+      width: 26px; height: 26px;
+      border: 2.5px solid rgba(245,166,35,0.25);
+      border-top-color: #F5A623;
+      border-radius: 50%;
+      animation: arresto-rotate .8s linear infinite;
+    }
+    @keyframes arresto-rotate { to { transform: rotate(360deg); } }
+    @media (max-width: 640px)  { #arresto-splash img { height: 32px; } }
+    @media (min-width: 641px) and (max-width: 1023px) { #arresto-splash img { height: 38px; } }
+  </style>
 </head>
 <body>
+  <!-- Branded splash shown until Flutter renders its first frame -->
+  <div id="arresto-splash">
+    <img src="assets/assets/images/arresto_logo.png" alt="Arresto"
+         onerror="this.style.display='none'">
+    <div class="arresto-spin"></div>
+  </div>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -41,6 +82,12 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('arresto-splash');
+      if (s) { s.classList.add('arresto-hide'); setTimeout(function(){ s.remove(); }, 500); }
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
