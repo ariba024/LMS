@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/avatar.dart';
+import '../../../core/widgets/arresto_brand_logo.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/providers/api_providers.dart';
@@ -52,11 +54,14 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
     final notifsAsync = ref.watch(notificationsProvider(recipientId));
     final unread = notifsAsync.valueOrNull?.where((n) => !n.read).length ?? 0;
 
-    return Container(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       height: ArrestoSpacing.headerHeight,
-      decoration: const BoxDecoration(
-        color: ArrestoColors.surface,
-        border: Border(bottom: BorderSide(color: ArrestoColors.cardBorder)),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.55),
+        border: const Border(bottom: BorderSide(color: ArrestoColors.cardBorder)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -168,6 +173,8 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 }
@@ -264,12 +271,7 @@ class _ProfileDropdown extends ConsumerWidget {
 class _ArrestoLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      'assets/images/arresto_logo.png',
-      height: 34,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
-    );
+    return const ArrestoBrandLogo();
   }
 }
 
@@ -317,7 +319,7 @@ class _RoleSwitcher extends ConsumerWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: active ? ArrestoColors.ink : ArrestoColors.textMuted,
+            color: active ? const Color(0xFF1B1B1D) : ArrestoColors.textMuted,
           ),
         ),
       ),

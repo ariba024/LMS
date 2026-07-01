@@ -10,7 +10,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/button.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import 'interactive_question.dart';
 import '../../../data/providers/app_state.dart';
 import '../../../data/providers/api_providers.dart';
@@ -890,7 +890,7 @@ class _PrevNextRow extends StatelessWidget {
           label: 'Ask Arresto AI',
           variant: ArrestoButtonVariant.ghost,
           size: ArrestoButtonSize.sm,
-          icon: const ArrestoAiLogo(size: 18),
+          icon: const ArrestoAiAvatar(size: 20, circle: true, transparent: true),
           onPressed: onAskAi,
         ),
       ]),
@@ -1527,7 +1527,7 @@ class _NotesTab extends StatelessWidget {
           label: 'Arresto AI notes',
           size: ArrestoButtonSize.sm,
           variant: ArrestoButtonVariant.ghost,
-          icon: const ArrestoAiLogo(size: 18),
+          icon: const ArrestoAiAvatar(size: 20, circle: true, transparent: true),
           onPressed: onAiNotes,
         ),
         const SizedBox(width: 8),
@@ -1997,7 +1997,7 @@ class _RightSidebar extends StatelessWidget {
         ArrestoCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const ArrestoAiLogo(size: 34),
+              const ArrestoAiAvatar(size: 36, circle: true),
               const SizedBox(width: 10),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Learning companion', style: ArrestoText.bodyBold()),
@@ -2035,7 +2035,7 @@ class _RightSidebar extends StatelessWidget {
               child: ArrestoButton(
                 label: 'Ask Arresto AI',
                 variant: ArrestoButtonVariant.dark,
-                icon: const ArrestoAiLogo(size: 18),
+                icon: const ArrestoAiAvatar(size: 20, circle: true, transparent: true),
                 onPressed: onAskAi,
               ),
             ),

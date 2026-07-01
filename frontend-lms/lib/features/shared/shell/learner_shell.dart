@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,8 +7,8 @@ import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
 import 'app_header.dart';
 import '../arresto_ai/arresto_ai_panel.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
-import '../../../core/widgets/circuit_board_background.dart';
+import '../../../core/widgets/arresto_circuit_background.dart';
+import '../../../core/widgets/floating_ai_button.dart';
 
 class LearnerShell extends ConsumerWidget {
   final Widget child;
@@ -18,26 +19,44 @@ class LearnerShell extends ConsumerWidget {
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
     final isMobile = MediaQuery.of(context).size.width < 640;
 
+    final location = GoRouterState.of(context).uri.toString();
+    // Lesson player has its own AI button; /learner/ai renders the panel inline.
+    final showAi =
+        !(location.contains('/lesson/') || location == '/learner/ai');
+
     return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      body: CircuitBoardBackground(
-        child: Column(
-          children: [
-            const AppHeader(),
-            Expanded(
-              child: Row(
-                children: [
-                  if (isDesktop) const _LearnerSidebar(),
-                  Expanded(child: child),
-                ],
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          ArrestoCircuitBackground(
+            child: Column(
+              children: [
+                const AppHeader(),
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (isDesktop) const _LearnerSidebar(),
+                      Expanded(child: child),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (showAi)
+            Positioned.fill(
+              child: FloatingAiButton(
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const ArrestoAIPanel(),
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
       bottomNavigationBar: isMobile ? const _LearnerBottomNav() : null,
-      floatingActionButton: const _AIFab(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -49,11 +68,14 @@ class _LearnerSidebar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).uri.toString();
 
-    return Container(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       width: ArrestoSpacing.sidebarWidth,
-      decoration: const BoxDecoration(
-        color: ArrestoColors.surface,
-        border: Border(right: BorderSide(color: ArrestoColors.cardBorder)),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.55),
+        border: const Border(right: BorderSide(color: ArrestoColors.cardBorder)),
       ),
       child: Column(
         children: [
@@ -178,6 +200,8 @@ class _LearnerSidebar extends ConsumerWidget {
           ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -309,32 +333,5 @@ class _LearnerBottomNav extends StatelessWidget {
     if (loc.startsWith('/learner/certificates')) return 3;
     if (loc.startsWith('/learner/profile')) return 4;
     return 0;
-  }
-}
-
-class _AIFab extends StatelessWidget {
-  const _AIFab();
-
-  @override
-  Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    // Lesson player has its own AI button; /learner/ai renders the full panel inline.
-    if (location.contains('/lesson/') || location == '/learner/ai') {
-      return const SizedBox.shrink();
-    }
-
-    return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.amber,
-      onPressed: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => const ArrestoAIPanel(),
-      ),
-      icon: const ArrestoAiLogo(size: 24),
-      label: Text('Arresto AI',
-          style: ArrestoText.small(color: ArrestoColors.ink)
-              .copyWith(fontWeight: FontWeight.w600)),
-    );
   }
 }

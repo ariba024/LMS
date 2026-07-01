@@ -10,6 +10,7 @@ import '../../../core/widgets/chip_group.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/progress_bar.dart';
 import '../../../core/widgets/course_thumb.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import '../../../data/providers/api_providers.dart';
 
 class CourseGeneratorWizard extends ConsumerStatefulWidget {
@@ -55,15 +56,6 @@ class _CourseGeneratorWizardState
   static const _langCode = {
     'English':   'en',
     'Hindi':     'hi',
-    'Tamil':     'ta',
-    'Telugu':    'te',
-    'Kannada':   'kn',
-    'Malayalam': 'ml',
-    'Bengali':   'bn',
-    'Marathi':   'mr',
-    'Gujarati':  'gu',
-    'Punjabi':   'pa',
-    'Odia':      'od',
   };
 
   // Step 8: Publish settings (lifted so the bottom-bar button can read them)
@@ -157,134 +149,136 @@ class _CourseGeneratorWizardState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ArrestoColors.background,
+      backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          // Stepper header
-          Container(
-            color: ArrestoColors.surface,
-            padding:
-                const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          // ── Stepper header (glass) ──
+          _glassBar(
+            border: const Border(
+                bottom: BorderSide(color: ArrestoColors.cardBorder)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text('Course Generator', style: ArrestoText.h3()),
-                    const Spacer(),
-                    Text('Step ${_step + 1} of ${_steps.length}',
-                        style: ArrestoText.small()),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [ArrestoColors.amber, ArrestoColors.orange],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                ArrestoColors.amber.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.auto_awesome_rounded,
+                          size: 20, color: Color(0xFF1B1B1D)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Course Generator',
+                              style: ArrestoText.h3().copyWith(fontSize: 18)),
+                          const SizedBox(height: 2),
+                          Text(
+                              'Create AI-powered interactive safety training in minutes',
+                              style:
+                                  ArrestoText.xs(color: ArrestoColors.textMuted)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: ArrestoColors.amberSoft,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                            color:
+                                ArrestoColors.amber.withValues(alpha: 0.35)),
+                      ),
+                      child: Text('Step ${_step + 1} of ${_steps.length}',
+                          style: ArrestoText.xs(color: ArrestoColors.amber)
+                              .copyWith(fontWeight: FontWeight.w700)),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 AnimatedArrestoProgressBar(
                   value: (_step + 1) / _steps.length,
                   tone: ProgressTone.orange,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 SizedBox(
-                  height: 56,
+                  height: 58,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _steps.length,
-                    itemBuilder: (ctx, i) {
-                      final done = i < _step;
-                      final active = i == _step;
-                      return GestureDetector(
-                        onTap: () => setState(() => _step = i),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  if (i > 0)
-                                    Container(
-                                      width: 16,
-                                      height: 2,
-                                      color: done || active
-                                          ? ArrestoColors.orange
-                                          : ArrestoColors.line,
-                                    ),
-                                  Container(
-                                    width: 28,
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      color: done
-                                          ? ArrestoColors.green
-                                          : active
-                                              ? ArrestoColors.orange
-                                              : ArrestoColors.bg2,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: done
-                                            ? ArrestoColors.green
-                                            : active
-                                                ? ArrestoColors.orange
-                                                : ArrestoColors.lineStrong,
-                                      ),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: done
-                                        ? const Icon(Icons.check_rounded,
-                                            size: 14, color: Colors.white)
-                                        : Text(
-                                            '${i + 1}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: active
-                                                  ? Colors.white
-                                                  : ArrestoColors.textMuted,
-                                            ),
-                                          ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _steps[i],
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: active
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: active
-                                      ? ArrestoColors.orange
-                                      : done
-                                          ? ArrestoColors.green
-                                          : ArrestoColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                    itemBuilder: (ctx, i) => _StepPill(
+                      index: i,
+                      label: _steps[i],
+                      done: i < _step,
+                      active: i == _step,
+                      onTap: () => setState(() => _step = i),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
 
-          // Step content
+          // ── Step content (centered, generous whitespace) ──
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: _buildStep(_step),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxWidth: _step == 0 ? 1180 : 960),
+                  child: _buildStep(_step),
+                ),
+              ),
             ),
           ),
 
-          // Navigation
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-            decoration: const BoxDecoration(
-              color: ArrestoColors.surface,
-              border: Border(top: BorderSide(color: ArrestoColors.line)),
-            ),
+          // ── Navigation (glass) ──
+          _glassBar(
+            border:
+                const Border(top: BorderSide(color: ArrestoColors.cardBorder)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
               children: [
-                if (_step > 0)
+                if (_step == 0) ...[
+                  ArrestoButton(
+                    label: 'Save Draft',
+                    variant: ArrestoButtonVariant.ghost,
+                    icon: const Icon(Icons.bookmark_border_rounded),
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('Draft kept for this session.')),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ArrestoButton(
+                    label: 'Preview',
+                    variant: ArrestoButtonVariant.ghost,
+                    icon: const Icon(Icons.visibility_outlined),
+                    onPressed: () =>
+                        setState(() => _step = _steps.length - 3),
+                  ),
+                ] else if (_step > 0)
                   ArrestoButton(
                     label: 'Back',
                     variant: ArrestoButtonVariant.ghost,
@@ -293,13 +287,13 @@ class _CourseGeneratorWizardState
                   ),
                 const Spacer(),
                 if (_step < _steps.length - 1)
-                  ArrestoButton(
+                  _GradientButton(
                     label: 'Continue',
-                    icon: const Icon(Icons.arrow_forward_rounded),
+                    icon: Icons.arrow_forward_rounded,
                     onPressed: () => setState(() => _step++),
                   )
                 else
-                  ArrestoButton(
+                  _GradientButton(
                     label: _videoQueued
                         ? 'Published · Videos queued!'
                         : _published
@@ -307,18 +301,41 @@ class _CourseGeneratorWizardState
                             : _publishing
                                 ? 'Publishing…'
                                 : 'Publish Course',
-                    variant: _published
-                        ? ArrestoButtonVariant.ghost
-                        : ArrestoButtonVariant.dark,
-                    icon: Icon(_published
+                    icon: _published
                         ? Icons.check_circle_rounded
-                        : Icons.rocket_launch_rounded),
-                    onPressed: (_publishing || _published) ? () {} : _publishCourse,
+                        : Icons.rocket_launch_rounded,
+                    loading: _publishing,
+                    onPressed:
+                        (_publishing || _published) ? null : _publishCourse,
                   ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Translucent bar used for the stepper header and nav footer. Uses a solid
+  /// translucent fill (no live BackdropFilter) so it stays cheap even with the
+  /// animated backdrop and the shell's own glass header/sidebar already blurring.
+  Widget _glassBar({
+    required Widget child,
+    Border? border,
+    EdgeInsets padding =
+        const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.82),
+        border: border,
+      ),
+      padding: padding,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1008),
+          child: child,
+        ),
       ),
     );
   }
@@ -405,9 +422,209 @@ class _CourseGeneratorWizardState
   }
 }
 
+// ── Stepper pill ──────────────────────────────────────────────────────────────
+
+class _StepPill extends StatelessWidget {
+  final int index;
+  final String label;
+  final bool done;
+  final bool active;
+  final VoidCallback onTap;
+  const _StepPill({
+    required this.index,
+    required this.label,
+    required this.done,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final circleColor = done
+        ? ArrestoColors.green
+        : active
+            ? ArrestoColors.orange
+            : ArrestoColors.bg2;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? ArrestoColors.amberSoft
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? ArrestoColors.amber.withValues(alpha: 0.35)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            if (index > 0)
+              Container(
+                width: 14,
+                height: 2,
+                margin: const EdgeInsets.only(right: 8),
+                color: (done || active)
+                    ? ArrestoColors.orange
+                    : ArrestoColors.line,
+              ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: circleColor,
+                shape: BoxShape.circle,
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: ArrestoColors.orange.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                        )
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: done
+                  ? const Icon(Icons.check_rounded,
+                      size: 14, color: Colors.white)
+                  : Text('${index + 1}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color:
+                            active ? Colors.white : ArrestoColors.textMuted,
+                      )),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active
+                    ? ArrestoColors.amber
+                    : done
+                        ? ArrestoColors.green
+                        : ArrestoColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Primary gradient button (the wizard's focal CTA) ────────────────────────────
+
+class _GradientButton extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool loading;
+  const _GradientButton({
+    required this.label,
+    required this.icon,
+    this.onPressed,
+    this.loading = false,
+  });
+
+  @override
+  State<_GradientButton> createState() => _GradientButtonState();
+}
+
+class _GradientButtonState extends State<_GradientButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null && !widget.loading;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        transform: _hover && enabled
+            ? (Matrix4.identity()..translate(0.0, -2.0))
+            : Matrix4.identity(),
+        decoration: BoxDecoration(
+          gradient: enabled
+              ? const LinearGradient(
+                  colors: [ArrestoColors.amber, ArrestoColors.orange],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: enabled ? null : ArrestoColors.bg2,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: enabled
+              ? [
+                  BoxShadow(
+                    color: ArrestoColors.amber
+                        .withValues(alpha: _hover ? 0.45 : 0.28),
+                    blurRadius: _hover ? 24 : 16,
+                    spreadRadius: _hover ? 1 : 0,
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onPressed,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.loading)
+                    const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Color(0xFF1B1B1D)),
+                    )
+                  else
+                    Icon(widget.icon,
+                        size: 17,
+                        color: enabled
+                            ? const Color(0xFF1B1B1D)
+                            : ArrestoColors.textMuted),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: enabled
+                          ? const Color(0xFF1B1B1D)
+                          : ArrestoColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Step 1: Requirements ──────────────────────────────────────────────────────
 
-class _StepRequirements extends StatelessWidget {
+class _StepRequirements extends StatefulWidget {
   final TextEditingController titleCtrl;
   final TextEditingController topicCtrl;
   final TextEditingController descCtrl;
@@ -439,7 +656,69 @@ class _StepRequirements extends StatelessWidget {
   });
 
   @override
+  State<_StepRequirements> createState() => _StepRequirementsState();
+}
+
+class _StepRequirementsState extends State<_StepRequirements> {
+  @override
+  void initState() {
+    super.initState();
+    // Live-echo the course name/topic/objectives into the preview panel as the
+    // user types (purely local UI state — no app state/logic changes).
+    widget.titleCtrl.addListener(_onChange);
+    widget.topicCtrl.addListener(_onChange);
+    widget.objectivesCtrl.addListener(_onChange);
+  }
+
+  void _onChange() => setState(() {});
+
+  @override
+  void dispose() {
+    widget.titleCtrl.removeListener(_onChange);
+    widget.topicCtrl.removeListener(_onChange);
+    widget.objectivesCtrl.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _suggestObjectives() {
+    final topic = widget.topicCtrl.text.trim();
+    final subject = topic.isEmpty ? 'this topic' : topic;
+    final text = '• Identify key hazards related to $subject.\n'
+        '• Apply correct safety procedures and use of PPE.\n'
+        '• Respond appropriately to ${widget.audience.toLowerCase()} scenarios.\n'
+        '• Demonstrate compliance with relevant safety standards.';
+    widget.objectivesCtrl.text = text;
+    widget.objectivesCtrl.selection =
+        TextSelection.collapsed(offset: text.length);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final form = _buildForm();
+    final panel = _LiveAiPanel(
+      courseName: widget.titleCtrl.text.trim(),
+      difficulty: widget.difficulty,
+      language: widget.language,
+      courseLength: widget.courseLength,
+    );
+
+    return LayoutBuilder(builder: (ctx, c) {
+      final wide = c.maxWidth >= 880;
+      if (!wide) {
+        return Column(children: [form, const SizedBox(height: 16), panel]);
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 7, child: form),
+          const SizedBox(width: 18),
+          Expanded(flex: 3, child: panel),
+        ],
+      );
+    });
+  }
+
+  Widget _buildForm() {
     return ArrestoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,201 +728,147 @@ class _StepRequirements extends StatelessWidget {
             title: 'Course Requirements',
             subtitle: 'Define what you want to teach',
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Course Name', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    TextFormField(
-                      controller: titleCtrl,
-                      decoration: const InputDecoration(
-                          hintText: 'e.g. Working at Heights — Foundation'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Topic', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    TextFormField(
-                      controller: topicCtrl,
-                      decoration: const InputDecoration(
-                          hintText: 'e.g. Fall protection principles'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Description', style: ArrestoText.label()),
-              const SizedBox(height: 5),
-              TextFormField(
-                controller: descCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    hintText: 'Describe the course focus and key themes...'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Target Audience', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    DropdownButtonFormField<String>(
-                      value: audience,
-                      dropdownColor: ArrestoColors.surface,
-                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
-                      decoration: const InputDecoration(),
-                      items: const [
-                        'Construction workers',
-                        'Site supervisors',
-                        'Safety officers',
-                        'All workers',
-                      ]
-                          .map((o) => DropdownMenuItem(
-                              value: o,
-                              child: Text(o,
-                                  style: ArrestoText.body(
-                                      color: ArrestoColors.textPrimary))))
-                          .toList(),
-                      onChanged: onAudienceChanged,
-                    ),
-                  ],
+                child: _FieldBlock(
+                  label: 'Course Name',
+                  child: _GlassField(
+                    controller: widget.titleCtrl,
+                    icon: Icons.title_rounded,
+                    hint: 'e.g. Working at Heights — Foundation',
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Difficulty', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    ChipGroup(
-                      options: const ['Beginner', 'Intermediate', 'Advanced'],
-                      selected: difficulty,
-                      onChanged: onDifficultyChanged,
-                    ),
-                  ],
+                child: _FieldBlock(
+                  label: 'Topic',
+                  child: _GlassField(
+                    controller: widget.topicCtrl,
+                    icon: Icons.track_changes_rounded,
+                    hint: 'e.g. Fall protection principles',
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Learning Objectives', style: ArrestoText.label()),
-              const SizedBox(height: 5),
-              TextFormField(
-                controller: objectivesCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    hintText:
-                        'List what learners will be able to do after this course...'),
-              ),
-            ],
+          const SizedBox(height: 16),
+          _FieldBlock(
+            label: 'Description',
+            child: _GlassField(
+              controller: widget.descCtrl,
+              icon: Icons.notes_rounded,
+              hint: 'Describe the course focus and key themes...',
+              minLines: 3,
+              maxLines: 5,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Course Length', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    DropdownButtonFormField<String>(
-                      value: courseLength,
-                      dropdownColor: ArrestoColors.surface,
-                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
-                      decoration: const InputDecoration(),
-                      items: const [
-                        '15-20 minutes',
-                        '30-45 minutes',
-                        '60-90 minutes',
-                        '2-3 hours',
-                        '3+ hours',
-                      ]
-                          .map((o) => DropdownMenuItem(
-                              value: o,
-                              child: Text(o,
-                                  style: ArrestoText.body(
-                                      color: ArrestoColors.textPrimary))))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) onCourseLengthChanged(v);
-                      },
-                    ),
-                  ],
+                child: _FieldBlock(
+                  label: 'Target Audience',
+                  child: _PremiumDropdown(
+                    value: widget.audience,
+                    icon: Icons.groups_rounded,
+                    items: const [
+                      'Construction workers',
+                      'Site supervisors',
+                      'Safety officers',
+                      'All workers',
+                    ],
+                    onChanged: widget.onAudienceChanged,
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Course Language', style: ArrestoText.label()),
-                    const SizedBox(height: 5),
-                    DropdownButtonFormField<String>(
-                      value: language,
-                      dropdownColor: ArrestoColors.surface,
-                      style: ArrestoText.body(color: ArrestoColors.textPrimary),
-                      decoration: const InputDecoration(),
-                      items: const [
-                        'English',
-                        'Hindi',
-                        'Tamil',
-                        'Telugu',
-                        'Kannada',
-                        'Malayalam',
-                        'Bengali',
-                        'Marathi',
-                        'Gujarati',
-                        'Punjabi',
-                        'Odia',
-                      ]
-                          .map((o) => DropdownMenuItem(
-                              value: o,
-                              child: Text(o,
-                                  style: ArrestoText.body(
-                                      color: ArrestoColors.textPrimary))))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) onLanguageChanged(v);
-                      },
-                    ),
-                  ],
+                child: _FieldBlock(
+                  label: 'Difficulty',
+                  child: _SegmentedDifficulty(
+                    selected: widget.difficulty,
+                    onChanged: widget.onDifficultyChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // ── Learning Objectives — AI smart editor ──
+          _FieldBlock(
+            label: 'Learning Objectives',
+            trailing: _AiChip(label: 'Generate', onTap: _suggestObjectives),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _GlassField(
+                  controller: widget.objectivesCtrl,
+                  icon: Icons.checklist_rounded,
+                  hint:
+                      'List what learners will be able to do after this course...',
+                  minLines: 3,
+                  maxLines: 6,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${widget.objectivesCtrl.text.length} characters · tap ✨ Generate for AI suggestions',
+                  style: ArrestoText.xs(color: ArrestoColors.textMuted2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _FieldBlock(
+                  label: 'Course Length',
+                  child: _PremiumDropdown(
+                    value: widget.courseLength,
+                    icon: Icons.schedule_rounded,
+                    items: const [
+                      '15-20 minutes',
+                      '30-45 minutes',
+                      '60-90 minutes',
+                      '2-3 hours',
+                      '3+ hours',
+                    ],
+                    onChanged: (v) {
+                      if (v != null) widget.onCourseLengthChanged(v);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _FieldBlock(
+                  label: 'Course Language',
+                  child: _PremiumDropdown(
+                    value: widget.language,
+                    icon: Icons.translate_rounded,
+                    items: const ['English', 'Hindi'],
+                    onChanged: (v) {
+                      if (v != null) widget.onLanguageChanged(v);
+                    },
+                  ),
                 ),
               ),
             ],
           ),
 
-          // ── Generation Instructions ───────────────────────────────────────
-          const SizedBox(height: 20),
+          // ── Generation Instructions ──
+          const SizedBox(height: 22),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: ArrestoColors.orangeTint,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                   color: ArrestoColors.orange.withValues(alpha: 0.35)),
             ),
@@ -652,7 +877,7 @@ class _StepRequirements extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.edit_note_rounded,
+                    const Icon(Icons.auto_awesome_rounded,
                         size: 16, color: ArrestoColors.orange),
                     const SizedBox(width: 6),
                     Text('Generation Instructions',
@@ -666,40 +891,575 @@ class _StepRequirements extends StatelessWidget {
                   'The AI will follow these strictly — language, topics, structure, tone, anything.',
                   style: ArrestoText.xs(color: ArrestoColors.textMuted),
                 ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: userInstructCtrl,
+                const SizedBox(height: 12),
+                _GlassField(
+                  controller: widget.userInstructCtrl,
+                  icon: Icons.edit_note_rounded,
+                  hint:
+                      'e.g. Generate the entire course in Hindi. Cover topics in this order: '
+                      '1. Legal framework  2. Hazard identification  3. PPE use. '
+                      'Include 3 quiz questions after each module.',
+                  minLines: 5,
                   maxLines: null,
-                  minLines: 6,
-                  style: const TextStyle(fontSize: 13, height: 1.6),
-                  decoration: InputDecoration(
-                    hintText:
-                        'e.g. Generate the entire course in Hindi. Cover these topics in this order: '
-                        '1. Legal framework  2. Hazard identification  3. PPE use. '
-                        'Use simple language suitable for field workers. '
-                        'Include 3 quiz questions after each module.',
-                    hintStyle: TextStyle(
-                        color: ArrestoColors.textMuted2, fontSize: 12),
-                    filled: true,
-                    fillColor: ArrestoColors.surface,
-                    contentPadding: const EdgeInsets.all(14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: ArrestoColors.orange
-                              .withValues(alpha: 0.3)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Premium form building blocks ────────────────────────────────────────────
+
+class _FieldBlock extends StatelessWidget {
+  final String label;
+  final Widget child;
+  final Widget? trailing;
+  const _FieldBlock({required this.label, required this.child, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: ArrestoText.label()),
+            if (trailing != null) ...[const Spacer(), trailing!],
+          ],
+        ),
+        const SizedBox(height: 7),
+        child,
+      ],
+    );
+  }
+}
+
+class _GlassField extends StatefulWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final int minLines;
+  final int? maxLines;
+  const _GlassField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.minLines = 1,
+    this.maxLines = 1,
+  });
+
+  @override
+  State<_GlassField> createState() => _GlassFieldState();
+}
+
+class _GlassFieldState extends State<_GlassField> {
+  final FocusNode _fn = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fn.addListener(() => setState(() => _focused = _fn.hasFocus));
+  }
+
+  @override
+  void dispose() {
+    _fn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final multiline = widget.maxLines == null || widget.maxLines! > 1;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.symmetric(horizontal: 13, vertical: multiline ? 12 : 3),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _focused ? ArrestoColors.amber : ArrestoColors.cardBorder,
+          width: 1.4,
+        ),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: ArrestoColors.amber.withValues(alpha: 0.18),
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        crossAxisAlignment:
+            multiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: multiline ? 10 : 0, right: 10),
+            child: Icon(widget.icon,
+                size: 17,
+                color: _focused ? ArrestoColors.amber : ArrestoColors.textMuted),
+          ),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _fn,
+              minLines: widget.minLines,
+              maxLines: widget.maxLines,
+              style: const TextStyle(
+                  fontSize: 14, color: Colors.white, height: 1.5),
+              cursorColor: ArrestoColors.amber,
+              decoration: InputDecoration.collapsed(
+                hintText: widget.hint,
+                hintStyle: const TextStyle(
+                    color: ArrestoColors.textMuted2, fontSize: 13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PremiumDropdown extends StatelessWidget {
+  final String value;
+  final List<String> items;
+  final IconData icon;
+  final ValueChanged<String?> onChanged;
+  const _PremiumDropdown({
+    required this.value,
+    required this.items,
+    required this.icon,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 13),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ArrestoColors.cardBorder, width: 1.4),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: ArrestoColors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: value,
+                isExpanded: true,
+                borderRadius: BorderRadius.circular(14),
+                dropdownColor: ArrestoColors.surfaceSoft,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: ArrestoColors.textMuted),
+                style: const TextStyle(
+                    fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
+                items: items
+                    .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                    .toList(),
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegmentedDifficulty extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+  const _SegmentedDifficulty(
+      {required this.selected, required this.onChanged});
+
+  static const _opts = [
+    ('Beginner', Icons.eco_rounded),
+    ('Intermediate', Icons.trending_up_rounded),
+    ('Advanced', Icons.bolt_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ArrestoColors.cardBorder, width: 1.4),
+      ),
+      child: Row(
+        children: [
+          for (final o in _opts)
+            Expanded(
+              child: _SegItem(
+                label: o.$1,
+                icon: o.$2,
+                active: selected == o.$1,
+                onTap: () => onChanged(o.$1),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _SegItem(
+      {required this.label,
+      required this.icon,
+      required this.active,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: active ? 1.0 : 0.97,
+        duration: const Duration(milliseconds: 180),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            gradient: active
+                ? const LinearGradient(
+                    colors: [ArrestoColors.amber, ArrestoColors.orange])
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: ArrestoColors.amber.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                    )
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 14,
+                  color: active
+                      ? const Color(0xFF1B1B1D)
+                      : ArrestoColors.textMuted),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: active
+                        ? const Color(0xFF1B1B1D)
+                        : ArrestoColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _AiChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: ArrestoColors.amberSoft,
+          borderRadius: BorderRadius.circular(999),
+          border:
+              Border.all(color: ArrestoColors.amber.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.auto_awesome_rounded,
+                size: 12, color: ArrestoColors.amber),
+            const SizedBox(width: 4),
+            Text(label,
+                style: ArrestoText.xs(color: ArrestoColors.amber)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Live AI Preview panel ─────────────────────────────────────────────────────
+
+({String duration, int modules, int assessments, int media}) _estimate(
+    String len) {
+  switch (len) {
+    case '15-20 minutes':
+      return (duration: '18m', modules: 2, assessments: 3, media: 6);
+    case '30-45 minutes':
+      return (duration: '42m', modules: 4, assessments: 6, media: 12);
+    case '2-3 hours':
+      return (duration: '2h 30m', modules: 9, assessments: 18, media: 28);
+    case '3+ hours':
+      return (duration: '3h 45m', modules: 12, assessments: 24, media: 40);
+    case '60-90 minutes':
+    default:
+      return (duration: '1h 20m', modules: 6, assessments: 12, media: 18);
+  }
+}
+
+class _LiveAiPanel extends StatelessWidget {
+  final String courseName;
+  final String difficulty;
+  final String language;
+  final String courseLength;
+  const _LiveAiPanel({
+    required this.courseName,
+    required this.difficulty,
+    required this.language,
+    required this.courseLength,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final est = _estimate(courseLength);
+    return Column(
+      children: [
+        ArrestoCard(
+          glow: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Course Blueprint', style: ArrestoText.h4()),
+                        Text('Live preview',
+                            style: ArrestoText.xs(
+                                color: ArrestoColors.textMuted)),
+                      ],
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: ArrestoColors.orange
-                              .withValues(alpha: 0.3)),
+                  ),
+                  const _PulseDot(),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const _BlueprintGraphic(),
+              const SizedBox(height: 14),
+              Text(
+                courseName.isEmpty ? 'Untitled course' : courseName,
+                style: ArrestoText.bodyBold(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              _PreviewStat(
+                  icon: Icons.schedule_rounded,
+                  label: 'Estimated Duration',
+                  value: est.duration),
+              _PreviewStat(
+                  icon: Icons.signal_cellular_alt_rounded,
+                  label: 'Difficulty',
+                  value: difficulty),
+              _PreviewStat(
+                  icon: Icons.widgets_rounded,
+                  label: 'Modules',
+                  value: '${est.modules}'),
+              _PreviewStat(
+                  icon: Icons.quiz_rounded,
+                  label: 'Assessments',
+                  value: '${est.assessments}'),
+              _PreviewStat(
+                  icon: Icons.play_circle_outline_rounded,
+                  label: 'Media Elements',
+                  value: '${est.media}'),
+              _PreviewStat(
+                  icon: Icons.translate_rounded,
+                  label: 'Language',
+                  value: language),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text('AI Confidence Score',
+                      style: ArrestoText.xs(color: ArrestoColors.textMuted)),
+                  const Spacer(),
+                  Text('92%',
+                      style: ArrestoText.smallBold(color: ArrestoColors.green)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              AnimatedArrestoProgressBar(
+                  value: 0.92, tone: ProgressTone.green, height: 6),
+              const SizedBox(height: 4),
+              Text('High quality course expected',
+                  style: ArrestoText.xs(color: ArrestoColors.green)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const _DockedAssistant(),
+      ],
+    );
+  }
+}
+
+class _BlueprintGraphic extends StatelessWidget {
+  const _BlueprintGraphic();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 120,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: const RadialGradient(
+          radius: 0.9,
+          colors: [Color(0xFF14202E), Color(0xFF0E1116)],
+        ),
+        border: Border.all(color: ArrestoColors.cardBorder),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                    color: ArrestoColors.blue.withValues(alpha: 0.35),
+                    blurRadius: 30,
+                    spreadRadius: 4),
+              ],
+            ),
+          ),
+          Icon(Icons.hexagon_outlined,
+              size: 62, color: ArrestoColors.blue.withValues(alpha: 0.9)),
+          const Icon(Icons.auto_awesome_rounded,
+              size: 24, color: Colors.white),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewStat extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _PreviewStat(
+      {required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: ArrestoColors.amber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: ArrestoColors.amber),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(label,
+                  style: ArrestoText.small(color: ArrestoColors.textSecondary))),
+          Text(value, style: ArrestoText.smallBold()),
+        ],
+      ),
+    );
+  }
+}
+
+class _DockedAssistant extends StatelessWidget {
+  const _DockedAssistant();
+
+  @override
+  Widget build(BuildContext context) {
+    return ArrestoCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ArrestoAiAvatar(size: 38, circle: true),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Arresto AI', style: ArrestoText.bodyBold()),
+                    Row(
+                      children: [
+                        const _PulseDot(),
+                        const SizedBox(width: 5),
+                        Text('Ready · your course co-pilot',
+                            style: ArrestoText.xs(
+                                color: ArrestoColors.textMuted)),
+                      ],
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                          color: ArrestoColors.orange, width: 1.5),
-                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: ArrestoColors.bg2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: ArrestoColors.line),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.tips_and_updates_rounded,
+                    size: 15, color: ArrestoColors.amber),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tip: a clear topic + audience produces the sharpest, most compliant course.',
+                    style: ArrestoText.xs(color: ArrestoColors.textSecondary),
                   ),
                 ),
               ],
@@ -707,6 +1467,51 @@ class _StepRequirements extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PulseDot extends StatefulWidget {
+  const _PulseDot();
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) {
+        final t = _c.value;
+        return Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            color: ArrestoColors.green,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: ArrestoColors.green.withValues(alpha: 0.15 + 0.45 * t),
+                blurRadius: 4 + 6 * t,
+                spreadRadius: 1 + 2 * t,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1064,11 +1869,6 @@ class _StepScriptState extends State<_StepScript> {
   String _stage = '';
   Map<String, dynamic>? _courseScript;
 
-  static const _depthOptions = ['Overview', 'Standard', 'Deep Dive'];
-  static const _toneOptions = ['Formal', 'Conversational', 'Technical'];
-  String _depth = 'Standard';
-  String _tone = 'Conversational';
-
   Future<void> _generate() async {
     if (widget.selectedDoc == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1101,8 +1901,6 @@ class _StepScriptState extends State<_StepScript> {
       if (desc.isNotEmpty) parts.add('Course description: ${_norm(desc)}.');
       parts.add('Difficulty level: ${widget.difficulty}.');
       if (objectives.isNotEmpty) parts.add('Learning objectives: ${_norm(objectives)}.');
-      if (_depth != 'Standard') parts.add('Depth: $_depth.');
-      if (_tone != 'Conversational') parts.add('Tone: $_tone.');
       final instructions = parts.isEmpty ? null : parts.join(' ');
 
       final rawUserInstructions = widget.userInstructCtrl.text.trim();
@@ -1182,7 +1980,7 @@ class _StepScriptState extends State<_StepScript> {
                 icon: Icons.auto_fix_high_rounded,
                 title: 'Script Generation',
                 subtitle:
-                    'Configure AI settings and generate your course',
+                    'Generate the full course script from your source',
               ),
               const SizedBox(height: 16),
 
@@ -1232,44 +2030,6 @@ class _StepScriptState extends State<_StepScript> {
                   ]),
                 ),
 
-              const SizedBox(height: 16),
-              Text('AI Configuration', style: ArrestoText.label()),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Depth', style: ArrestoText.xs()),
-                        const SizedBox(height: 4),
-                        ChipGroup(
-                          options: _depthOptions,
-                          selected: _depth,
-                          onChanged: (v) =>
-                              setState(() => _depth = v),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Tone', style: ArrestoText.xs()),
-                        const SizedBox(height: 4),
-                        ChipGroup(
-                          options: _toneOptions,
-                          selected: _tone,
-                          onChanged: (v) =>
-                              setState(() => _tone = v),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 16),
 
               if (_error != null) ...[
@@ -1682,15 +2442,6 @@ class _StepLanguageState extends State<_StepLanguage> {
   static const _languages = [
     ('English',   '🇮🇳', 'en'),
     ('Hindi',     '🇮🇳', 'hi'),
-    ('Tamil',     '🇮🇳', 'ta'),
-    ('Telugu',    '🇮🇳', 'te'),
-    ('Kannada',   '🇮🇳', 'kn'),
-    ('Malayalam', '🇮🇳', 'ml'),
-    ('Bengali',   '🇮🇳', 'bn'),
-    ('Marathi',   '🇮🇳', 'mr'),
-    ('Gujarati',  '🇮🇳', 'gu'),
-    ('Punjabi',   '🇮🇳', 'pa'),
-    ('Odia',      '🇮🇳', 'od'),
   ];
 
   static const _voices = [

@@ -14,7 +14,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/sarvam_tts_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 
 /// Context about the lesson the learner is currently watching, passed into the
 /// AI companion so it can answer about *this* lesson and the current section.
@@ -537,7 +537,7 @@ class _ArrestoAIPanelState extends State<ArrestoAIPanel> {
           ),
           child: Row(
             children: [
-              const ArrestoAiLogo(size: 36),
+              const ArrestoAiAvatar(size: 38, circle: true),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -912,24 +912,75 @@ class _EmptyState extends StatelessWidget {
         : _generic;
 
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const ArrestoAiLogo(size: 56),
-            const SizedBox(height: 12),
-            Text(
-              lc != null
-                  ? 'Ask me about "${lc.lessonTitle}"'
-                  : 'Ask me anything about safety training',
-              style: ArrestoText.h4(color: ArrestoColors.textPrimary),
-              textAlign: TextAlign.center,
+            // MR Solve-style hero card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF191200),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: ArrestoColors.amber.withValues(alpha: 0.45),
+                    width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: ArrestoColors.amber.withValues(alpha: 0.12),
+                    blurRadius: 32,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  const ArrestoAiMascot(size: 148),
+                  const SizedBox(height: 14),
+                  Text(
+                    lc != null
+                        ? 'Ask me about\n"${lc.lessonTitle}"'
+                        : 'Talk to Arresto AI',
+                    style: ArrestoText.h3(color: Colors.white)
+                        .copyWith(fontSize: 20, fontWeight: FontWeight.w800),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    lc != null
+                        ? 'Click Start and ask anything about this lesson.'
+                        : 'Click Start and ask anything about safety, compliance or risk.',
+                    style: ArrestoText.small(color: ArrestoColors.textMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => onChip(suggestions.first),
+                      icon: const Icon(Icons.chat_bubble_rounded,
+                          size: 15, color: Color(0xFF1B1B1D)),
+                      label: const Text('Start a Chat',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1B1B1D))),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: ArrestoColors.amber,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
-            Text('Type or tap the mic to talk',
-                style: ArrestoText.xs(), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            Text('Or try one of these:',
+                style: ArrestoText.xs(color: ArrestoColors.textMuted2)),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -938,14 +989,16 @@ class _EmptyState extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onChip(s),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: ArrestoColors.bg2,
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(color: ArrestoColors.line),
                     ),
                     child: Text(s,
-                        style: ArrestoText.small().copyWith(fontWeight: FontWeight.w500)),
+                        style: ArrestoText.small()
+                            .copyWith(fontWeight: FontWeight.w500)),
                   ),
                 );
               }).toList(),
@@ -984,7 +1037,7 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!msg.isUser) ...[
-              const ArrestoAiLogo(size: 28),
+              const ArrestoAiAvatar(size: 28, circle: true),
               const SizedBox(width: 8),
             ],
             Flexible(
@@ -1009,7 +1062,7 @@ class _MessageBubble extends StatelessWidget {
                             horizontal: 14, vertical: 10),
                         child: Text(
                           msg.text,
-                          style: ArrestoText.body(color: ArrestoColors.ink)
+                          style: ArrestoText.body(color: const Color(0xFF1B1B1D))
                               .copyWith(fontWeight: FontWeight.w500),
                         ),
                       )
@@ -1144,7 +1197,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const ArrestoAiLogo(size: 28),
+        const ArrestoAiAvatar(size: 28, circle: true),
         const SizedBox(width: 8),
         Container(
           margin: const EdgeInsets.only(bottom: 10),

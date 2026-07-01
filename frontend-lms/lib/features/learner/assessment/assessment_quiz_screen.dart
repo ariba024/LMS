@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import '../../../core/services/assessment_service.dart';
 import '../../../data/providers/api_providers.dart';
 
@@ -600,7 +600,7 @@ class _QuestionCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(22, 18, 22, 14),
             child: Row(children: [
-              const ArrestoAiLogo(size: 36),
+              const ArrestoAiAvatar(size: 36, circle: true),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

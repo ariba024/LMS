@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
-import '../theme/typography.dart';
 
 class ArrestoChip extends StatelessWidget {
   final String label;
@@ -27,13 +26,21 @@ class ArrestoChip extends StatelessWidget {
           border: Border.all(
             color: active ? ArrestoColors.amber : ArrestoColors.lineStrong,
           ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: ArrestoColors.amber.withValues(alpha: 0.28),
+                    blurRadius: 12,
+                  )
+                ]
+              : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? ArrestoColors.ink : ArrestoColors.textSecondary,
+            color: active ? const Color(0xFF1B1B1D) : ArrestoColors.textSecondary,
           ),
         ),
       ),

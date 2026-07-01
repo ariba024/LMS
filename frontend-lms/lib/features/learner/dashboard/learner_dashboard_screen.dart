@@ -12,7 +12,7 @@ import '../../../core/widgets/progress_bar.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/course_thumb.dart';
 import '../../../core/widgets/section_header.dart';
-import '../../../core/widgets/arresto_ai_logo.dart';
+import '../../../core/widgets/arresto_ai_mascot.dart';
 import '../../../data/providers/api_providers.dart';
 import '../../../data/models/course.dart';
 import '../../shared/arresto_ai/arresto_ai_panel.dart';
@@ -548,37 +548,59 @@ class _RightSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // AI promo
+        // AI promo — MR Solve style
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
           decoration: BoxDecoration(
-            color: ArrestoColors.amberSoft,
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFF191200),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: ArrestoColors.amber.withValues(alpha: 0.45), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: ArrestoColors.amber.withValues(alpha: 0.12),
+                blurRadius: 28,
+                spreadRadius: 4,
+              ),
+            ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const ArrestoAiLogo(size: 32),
-                  const SizedBox(width: 8),
-                  Text('Arresto AI',
-                      style: ArrestoText.h4(color: Colors.white)),
-                ],
-              ),
-              const SizedBox(height: 10),
+              const ArrestoAiMascot(size: 124),
+              const SizedBox(height: 12),
+              Text('Talk to Arresto AI',
+                  style: ArrestoText.h3(color: Colors.white)
+                      .copyWith(fontSize: 17, fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 6),
               Text(
-                'Ask any question about fall protection. Available 24/7.',
-                style: ArrestoText.small(color: Colors.white60),
+                'Click Start and ask anything about safety, compliance or risk.',
+                style: ArrestoText.small(color: ArrestoColors.textMuted),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 14),
-              ArrestoButton(
-                label: 'Ask Arresto AI',
-                onPressed: () => showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => const _AISheet(),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const _AISheet(),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_rounded,
+                      size: 15, color: Color(0xFF1B1B1D)),
+                  label: const Text('Start a Chat',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1B1B1D))),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ArrestoColors.amber,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ),
             ],

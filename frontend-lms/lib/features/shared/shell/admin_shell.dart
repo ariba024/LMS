@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/theme/spacing.dart';
+import 'dart:ui';
 import 'app_header.dart';
 import '../arresto_ai/arresto_ai_panel.dart';
-import '../../../core/widgets/circuit_board_background.dart';
+import '../../../core/widgets/arresto_circuit_background.dart';
+import '../../../core/widgets/floating_ai_button.dart';
 
 class AdminShell extends ConsumerWidget {
   final Widget child;
@@ -17,55 +19,37 @@ class AdminShell extends ConsumerWidget {
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
 
     return Scaffold(
-      backgroundColor: ArrestoColors.background,
-      floatingActionButton: const _AIFab(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: CircuitBoardBackground(
-        child: Column(
-          children: [
-            const AppHeader(),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (isDesktop) const _AdminSidebar(),
-                  Expanded(child: child),
-                ],
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          ArrestoCircuitBackground(
+            child: Column(
+              children: [
+                const AppHeader(),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (isDesktop) const _AdminSidebar(),
+                      Expanded(child: child),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: FloatingAiButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const ArrestoAIPanel(),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _AIFab extends StatelessWidget {
-  const _AIFab();
-
-  @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton.extended(
-      backgroundColor: ArrestoColors.amber,
-      onPressed: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => const ArrestoAIPanel(),
-      ),
-      icon: Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(
-          color: ArrestoColors.ink,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.auto_awesome_rounded,
-            size: 13, color: ArrestoColors.amber),
-      ),
-      label: Text('Arresto AI',
-          style: ArrestoText.small(color: ArrestoColors.ink)
-              .copyWith(fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -77,11 +61,14 @@ class _AdminSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
 
-    return Container(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       width: ArrestoSpacing.sidebarWidth,
-      decoration: const BoxDecoration(
-        color: ArrestoColors.surface,
-        border: Border(right: BorderSide(color: ArrestoColors.cardBorder)),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surface.withValues(alpha: 0.55),
+        border: const Border(right: BorderSide(color: ArrestoColors.cardBorder)),
       ),
       child: Column(
         children: [
@@ -183,6 +170,8 @@ class _AdminSidebar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

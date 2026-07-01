@@ -96,8 +96,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       FilledButton(
                           onPressed: _load,
                           style: FilledButton.styleFrom(
-                              backgroundColor: ArrestoColors.amber,
-                              foregroundColor: ArrestoColors.ink),
+                              backgroundColor: ArrestoColors.amber),
                           child: const Text('Retry')),
                     ],
                   ),
@@ -453,8 +452,7 @@ class _EmptyLeaderboard extends StatelessWidget {
             FilledButton(
               onPressed: onRefresh,
               style: FilledButton.styleFrom(
-                  backgroundColor: ArrestoColors.amber,
-                  foregroundColor: ArrestoColors.ink),
+                  backgroundColor: ArrestoColors.amber),
               child: const Text('Refresh'),
             ),
           ],

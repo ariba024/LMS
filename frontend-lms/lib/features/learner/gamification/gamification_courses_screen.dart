@@ -183,14 +183,12 @@ class _CourseCard extends StatelessWidget {
               onPressed: open,
               style: FilledButton.styleFrom(
                 backgroundColor: ArrestoColors.amber,
-                foregroundColor: ArrestoColors.ink,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
               child: Text('Play',
-                  style: ArrestoText.small(color: ArrestoColors.ink)
+                  style: ArrestoText.small(color: const Color(0xFF1B1B1D))
                       .copyWith(fontWeight: FontWeight.w700)),
             ),
           ],
