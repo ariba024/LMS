@@ -16,21 +16,21 @@ dependency injection (see dependencies.py).
 """
 
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
 
 from api.config import settings
 from api.routers import documents, chat, courses, tutor, progress, audio, voice, video, questions, tts, assessments
 from api.routers import profile, learners, analytics, notifications, gamification
 from api.routers import attention
+from api.routers import attention_events as attention_events_router
 from api.routers import auth as auth_router
 from api.routers import tickets as tickets_router
 from api.routers import admin_users as admin_users_router
@@ -88,8 +88,23 @@ async def lifespan(app: FastAPI):
             _db.commit()
             logger.info("Seeded default admin: admin@arresto.in / Admin@123 — change immediately!")
 
+    # GPU initialisation — detect CUDA early so all models land on the same device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name  = torch.cuda.get_device_name(0)
+            vram_gb   = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            logger.info("CUDA available — %s (%.1f GB VRAM)", gpu_name, vram_gb)
+            # Reserve the CUDA context now so the first model load isn't slow
+            torch.cuda.init()
+        else:
+            logger.info("CUDA not available — using CPU for all ML models")
+    except ImportError:
+        logger.info("torch not installed — ML models will use CPU")
+
     vs = VectorStore(persist_dir=str(settings.chroma_db_dir))
     em = Embedder()
+    em._load()  # warm up on GPU at startup instead of on first request
 
     captioner = None
     if settings.enable_captioning:
@@ -150,11 +165,12 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("TTS engine failed to init: %s", exc)
 
-    # Progress tracker — writes to lms.db (same file as ORM tables)
+    # Progress tracker — shares the ORM engine so there is only one connection pool to lms.db
+    from api.db import engine as _orm_engine
     from modules.progress.tracker import ProgressTracker
     from modules.progress.store   import ProgressStore
-    app.state.progress_tracker = ProgressTracker(store=ProgressStore(settings.progress_db_path))
-    logger.info("Progress tracker initialised (%s)", settings.progress_db_path)
+    app.state.progress_tracker = ProgressTracker(store=ProgressStore(engine=_orm_engine))
+    logger.info("Progress tracker initialised (shared ORM engine)")
 
     # Pre-warm OCR engine in the background so the first document upload
     # doesn't stall while EasyOCR downloads its language models (~150 MB).
@@ -228,6 +244,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def _request_logging(request: Request, call_next):
+    """Log method, path, status, latency and a short request ID for every HTTP call."""
+    req_id = uuid.uuid4().hex[:12]
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    ms = round((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "%s %s → %d  %dms  rid=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        ms,
+        req_id,
+    )
+    response.headers["X-Request-ID"] = req_id
+    return response
+
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(courses.router)
@@ -244,6 +279,7 @@ app.include_router(learners.router)
 app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(attention.router)
+app.include_router(attention_events_router.router)
 app.include_router(gamification.router)
 app.include_router(auth_router.router)
 app.include_router(tickets_router.router)

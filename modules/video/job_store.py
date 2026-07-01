@@ -117,6 +117,23 @@ class VideoJobStore:
         jobs = [j for j in self._jobs.values() if j.script_id == script_id]
         return sorted(jobs, key=lambda j: j.started_at, reverse=True)  # newest first
 
+    def delete(self, render_id: str) -> bool:
+        """Remove a render job from memory and DB. Returns True if it existed."""
+        if render_id not in self._jobs:
+            return False
+        del self._jobs[render_id]
+        try:
+            from api.db import SessionLocal
+            from api.models.renders import VideoRenderRow
+            with SessionLocal() as db:
+                row = db.get(VideoRenderRow, render_id)
+                if row:
+                    db.delete(row)
+                    db.commit()
+        except Exception as exc:
+            logger.warning("Could not delete render job from DB: %s", exc)
+        return True
+
     def save(self) -> None:
         """Persist all in-memory jobs (called by render engine after status changes)."""
         for job in list(self._jobs.values()):  # snapshot avoids dict-changed-size-during-iteration

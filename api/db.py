@@ -73,74 +73,47 @@ def get_db():
 
 def init_db() -> None:
     """
-    Create every table that doesn't exist yet, then run additive column migrations.
-    Safe to call on every startup — CREATE TABLE IF NOT EXISTS semantics.
+    Create every table that doesn't exist yet, then apply Alembic migrations.
+    Safe to call on every startup.
     """
     import api.models  # noqa: F401 — registers all ORM models with Base
     Base.metadata.create_all(bind=engine)
-    _run_migrations()
+    _run_alembic_migrations()
     db_type = "PostgreSQL" if _is_postgres else "SQLite"
     print(f"[db] {db_type} database initialised (all tables ready).")
 
 
-# ---------------------------------------------------------------------------
-# Schema migrations
-#
-# To add a new column: append a tuple to _ADDITIVE_COLS — no other file changes.
-# Format: (table, col_name, sql_type, default_sql, nullable)
-#
-# Each migration is idempotent: SQLite uses PRAGMA table_info to skip existing
-# columns; PostgreSQL uses ADD COLUMN IF NOT EXISTS.
-# ---------------------------------------------------------------------------
+def _run_alembic_migrations() -> None:
+    """
+    Apply pending Alembic migrations.
 
-_ADDITIVE_COLS: list[tuple[str, str, str, str, bool]] = [
-    # table               col_name                      sql_type   default_sql  nullable
-    ("course_scripts",    "language",                   "TEXT",    "'English'", False),
-    ("course_scripts",    "difficulty",                 "TEXT",    "''",        False),
-    ("course_scripts",    "published",                  "INTEGER", "false",     False),
-    ("course_scripts",    "assessment_num_questions",   "INTEGER", "5",         False),
-    ("course_scripts",    "assessment_pass_pct",        "INTEGER", "70",        False),
-    ("course_scripts",    "assessment_time_min",        "INTEGER", "30",        False),
-    ("course_scripts",    "assessment_retakes",         "INTEGER", "3",         False),
-    ("course_scripts",    "assessment_questions_json",  "TEXT",    "NULL",      True),
-    ("video_renders",     "scene_index",                "INTEGER", "NULL",      True),
-    ("video_renders",     "voice",                      "TEXT",    "''",        False),
-]
+    Strategy:
+    - New install: create_all() already created all tables from ORM models.
+      Stamp the DB as 'head' so Alembic knows migrations are already applied.
+    - Existing install (pre-Alembic): create_all() is a no-op on existing
+      tables; Alembic runs pending migrations (e.g. 001_add_schema_columns).
+    - Existing install (with Alembic): run only new pending migrations.
 
+    To add a new column in future: create a new migration with
+      alembic revision -m "add_xyz_column"
+    and write the upgrade()/downgrade() logic.  No manual ALTER TABLE needed.
+    """
+    from pathlib import Path as _Path
+    from alembic.config import Config
+    from alembic import command
+    from alembic.runtime.migration import MigrationContext
 
-def _run_migrations() -> None:
-    """Apply all pending additive column migrations."""
-    from sqlalchemy import text
+    _ini = _Path(__file__).resolve().parent.parent / "alembic.ini"
+    cfg = Config(str(_ini))
 
     with engine.connect() as conn:
-        if _is_postgres:
-            for table, col, typ, default, nullable in _ADDITIVE_COLS:
-                pg_type = "BOOLEAN" if typ == "INTEGER" and col == "published" else typ
-                null_clause = "" if nullable else f" NOT NULL DEFAULT {default}"
-                try:
-                    conn.execute(text(
-                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
-                        f"{col} {pg_type}{null_clause}"
-                    ))
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-        else:
-            # Cache PRAGMA results per table to avoid redundant round-trips
-            table_cols: dict[str, set[str]] = {}
-            for table, col, typ, default, nullable in _ADDITIVE_COLS:
-                if table not in table_cols:
-                    result = conn.execute(text(f"PRAGMA table_info({table})"))
-                    table_cols[table] = {row[1] for row in result}
-                if col not in table_cols[table]:
-                    if nullable:
-                        conn.execute(text(
-                            f"ALTER TABLE {table} ADD COLUMN {col} {typ}"
-                        ))
-                    else:
-                        conn.execute(text(
-                            f"ALTER TABLE {table} ADD COLUMN "
-                            f"{col} {typ} NOT NULL DEFAULT {default}"
-                        ))
-                    table_cols[table].add(col)
-            conn.commit()
+        ctx = MigrationContext.configure(conn)
+        current = ctx.get_current_revision()
+
+    if current is None:
+        # No alembic_version row — either a brand-new install or a pre-Alembic
+        # install.  In both cases create_all() / old _run_migrations() already
+        # applied the schema; stamp as head so migrations don't re-run.
+        command.stamp(cfg, "head")
+    else:
+        command.upgrade(cfg, "head")

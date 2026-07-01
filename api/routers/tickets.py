@@ -34,7 +34,8 @@ class _CreateTicketRequest(BaseModel):
 
 
 class _PatchTicketRequest(BaseModel):
-    status: str
+    status:   str | None = None
+    priority: str | None = None
 
 
 class _AddReplyRequest(BaseModel):
@@ -98,6 +99,8 @@ def create_ticket(
     current_user: UserRow = Depends(get_current_user),
 ):
     """Create a new support ticket for the authenticated user."""
+    from api.notification_store import push as _notif
+
     with SessionLocal() as db:
         ticket = TicketRow(
             subject=body.subject,
@@ -112,7 +115,16 @@ def create_ticket(
         db.add(ticket)
         db.commit()
         db.refresh(ticket)
-        return _row_to_out(ticket)
+        out = _row_to_out(ticket)
+
+    _notif(
+        "admin",
+        f"New Ticket: {out.id}",
+        f"From {out.learner_name}: {body.subject}",
+        "🎫",
+        "support_ticket",
+    )
+    return out
 
 
 @router.get("", response_model=list[_TicketOut])
@@ -139,19 +151,22 @@ def get_ticket(ticket_id: str, current_user: UserRow = Depends(get_current_user)
 
 
 @router.patch("/{ticket_id}", response_model=_TicketOut)
-def update_ticket_status(
+def update_ticket(
     ticket_id: str,
     body: _PatchTicketRequest,
     current_user: UserRow = Depends(get_current_user),
 ):
-    """Update ticket status (admin only)."""
+    """Update ticket status and/or priority (admin only)."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
     with SessionLocal() as db:
         row = db.get(TicketRow, ticket_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Ticket not found.")
-        row.status = body.status
+        if body.status is not None:
+            row.status = body.status
+        if body.priority is not None:
+            row.priority = body.priority
         row.updated_at = time.time()
         db.commit()
         db.refresh(row)
@@ -165,6 +180,8 @@ def add_reply(
     current_user: UserRow = Depends(get_current_user),
 ):
     """Add a reply to a ticket. Admin replies move status to In Progress."""
+    from api.notification_store import push as _notif
+
     with SessionLocal() as db:
         row = db.get(TicketRow, ticket_id)
         if row is None:
@@ -189,4 +206,27 @@ def add_reply(
             row.status = "In Progress"
         db.commit()
         db.refresh(row)
-        return _row_to_out(row)
+        out = _row_to_out(row)
+        # Capture for notification (outside session)
+        notif_recipient = row.learner_id
+        notif_subject   = row.subject
+
+    if is_admin:
+        # Learner gets notified that support replied
+        _notif(
+            notif_recipient,
+            "Support replied to your ticket",
+            f'Your ticket "{notif_subject}" has a new reply from Support Team.',
+            "💬",
+            "support_reply",
+        )
+    else:
+        # Admin gets notified of learner follow-up
+        _notif(
+            "admin",
+            f"Ticket reply: {ticket_id}",
+            f'{author} replied to "{notif_subject}".',
+            "🎫",
+            "support_ticket",
+        )
+    return out

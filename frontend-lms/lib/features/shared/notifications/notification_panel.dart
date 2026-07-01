@@ -116,7 +116,7 @@ class NotificationPanel extends ConsumerWidget {
                         style: ArrestoText.bodyMd(
                             color: n.read
                                 ? ArrestoColors.textMuted
-                                : ArrestoColors.ink),
+                                : ArrestoColors.textPrimary),
                       ),
                       subtitle: Text(
                         n.body,

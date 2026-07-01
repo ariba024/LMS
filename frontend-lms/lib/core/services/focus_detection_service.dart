@@ -14,11 +14,15 @@ class FocusDetectionService {
     defaultValue: 'ws://localhost:8000/ws/detect',
   );
 
+  static const _maxReconnectAttempts = 5;
+
   html.VideoElement? _videoEl;
   html.MediaStream?  _stream;
   WebSocketChannel?  _channel;
   StreamSubscription? _sub;
   Timer? _captureTimer;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
 
   final _statusCtrl = StreamController<FocusStatus>.broadcast();
   Stream<FocusStatus> get statusStream => _statusCtrl.stream;
@@ -33,6 +37,17 @@ class FocusDetectionService {
 
   Future<bool> start() async {
     if (_active) return true;
+
+    // Warn when served over HTTPS but WS URL is not wss:// — browsers block it.
+    if (html.window.location.protocol == 'https:' &&
+        _wsUrl.startsWith('ws://')) {
+      debugPrint(
+        '[Focus] WARNING: page is HTTPS but FOCUS_WS_URL uses ws:// — '
+        'connection will be blocked by the browser. Rebuild with '
+        '--dart-define=FOCUS_WS_URL=wss://<your-host>/ws/detect',
+      );
+    }
+
     try {
       // Camera
       _stream = await html.window.navigator.mediaDevices!.getUserMedia(
@@ -44,15 +59,12 @@ class FocusDetectionService {
         ..muted = true;
       await _videoEl!.onLoadedMetadata.first;
 
-      // WebSocket
-      _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
-      _sub = _channel!.stream.listen(_onMessage,
-          onError: (_) => _emit(FocusStatus.inactive),
-          onDone: () => _emit(FocusStatus.inactive));
+      _active = true;
+      _reconnectAttempts = 0;
+      _connectWs();
 
       // Capture loop — send a frame every 800ms
       _captureTimer = Timer.periodic(const Duration(milliseconds: 800), (_) => _capture());
-      _active = true;
       _emit(FocusStatus.focused);
       return true;
     } catch (e) {
@@ -60,6 +72,43 @@ class FocusDetectionService {
       _cleanup();
       return false;
     }
+  }
+
+  void _connectWs() {
+    _sub?.cancel();
+    _channel?.sink.close();
+    _channel = null;
+
+    try {
+      _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+      _sub = _channel!.stream.listen(
+        _onMessage,
+        onError: (_) => _scheduleReconnect(),
+        onDone: () => _scheduleReconnect(),
+      );
+    } catch (e) {
+      debugPrint('[Focus] WS connect failed: $e');
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    if (!_active) return; // stop() was called — don't reconnect
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('[Focus] Max reconnect attempts reached — giving up');
+      _emit(FocusStatus.inactive);
+      return;
+    }
+    final delaySecs = 1 << _reconnectAttempts; // 1, 2, 4, 8, 16
+    _reconnectAttempts++;
+    debugPrint(
+      '[Focus] WS disconnected — reconnecting in ${delaySecs}s '
+      '(attempt $_reconnectAttempts/$_maxReconnectAttempts)',
+    );
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(seconds: delaySecs), () {
+      if (_active) _connectWs();
+    });
   }
 
   void stop() {
@@ -104,6 +153,9 @@ class FocusDetectionService {
   void _cleanup() {
     _captureTimer?.cancel();
     _captureTimer = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectAttempts = 0;
     _sub?.cancel();
     _sub = null;
     _channel?.sink.close();

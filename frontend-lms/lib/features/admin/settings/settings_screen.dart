@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -229,7 +230,7 @@ class _ProfileSettings extends StatelessWidget {
   Widget _toggle(String label, bool value) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: ArrestoText.body(color: ArrestoColors.ink))),
+        Expanded(child: Text(label, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
         Switch(
           value: value,
           onChanged: (_) {},
@@ -259,7 +260,7 @@ class _AISettings extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.ink))),
+                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
                     Switch(
                       value: item.$2,
                       onChanged: (_) {},
@@ -293,7 +294,7 @@ class _NotificationSettings extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.ink))),
+                    Expanded(child: Text(item.$1, style: ArrestoText.body(color: ArrestoColors.textPrimary))),
                     Switch(
                       value: item.$2,
                       onChanged: (_) {},
@@ -357,6 +358,15 @@ class _BrandingSettings extends StatelessWidget {
 
 // ── Knowledge Base ────────────────────────────────────────────────────────────
 
+class _FileJob {
+  final String jobId;
+  final String filename;
+  String status; // processing | completed | failed
+  String? error;
+  int? chunksCreated;
+  _FileJob({required this.jobId, required this.filename, this.status = 'processing'});
+}
+
 class _KnowledgeBaseSettings extends ConsumerStatefulWidget {
   @override
   ConsumerState<_KnowledgeBaseSettings> createState() =>
@@ -365,38 +375,53 @@ class _KnowledgeBaseSettings extends ConsumerStatefulWidget {
 
 class _KnowledgeBaseSettingsState
     extends ConsumerState<_KnowledgeBaseSettings> {
-  bool _uploading = false;
-  String? _uploadError;
-  String? _uploadSuccess;
+  bool _picking = false;
+  String? _pickError;
+  List<_FileJob> _jobs = [];
+  Timer? _pollTimer;
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _anyProcessing => _jobs.any((j) => j.status == 'processing');
 
   void _pickAndUpload() {
     final input = html.FileUploadInputElement()
       ..accept = '.pdf,.docx,.pptx,.txt,.csv'
-      ..multiple = false;
+      ..multiple = true;
     input.click();
     input.onChange.listen((event) async {
-      final file = input.files?.first;
-      if (file == null) return;
+      final files = input.files;
+      if (files == null || files.isEmpty) return;
       setState(() {
-        _uploading = true;
-        _uploadError = null;
-        _uploadSuccess = null;
+        _picking = true;
+        _pickError = null;
+        _jobs = [];
       });
       try {
-        final reader = html.FileReader();
-        reader.readAsArrayBuffer(file);
-        await reader.onLoadEnd.first;
-        final raw = reader.result;
-        final bytes = raw is ByteBuffer
-            ? raw.asUint8List()
-            : Uint8List.fromList(raw as List<int>);
-        await DocumentService.uploadDocument(bytes, file.name);
+        final loaded = <({String name, List<int> bytes})>[];
+        for (final file in files) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file);
+          await reader.onLoadEnd.first;
+          final raw = reader.result;
+          final bytes = raw is ByteBuffer
+              ? raw.asUint8List()
+              : Uint8List.fromList(raw as List<int>);
+          loaded.add((name: file.name, bytes: bytes));
+        }
+        final submitted = await DocumentService.startBatchUpload(loaded);
         if (!mounted) return;
         setState(() {
-          _uploading = false;
-          _uploadSuccess = '${file.name} uploaded successfully.';
+          _picking = false;
+          _jobs = submitted
+              .map((s) => _FileJob(jobId: s.jobId, filename: s.filename))
+              .toList();
         });
-        ref.invalidate(documentsNotifierProvider);
+        if (_jobs.isNotEmpty) _startPolling();
       } catch (e) {
         if (!mounted) return;
         String msg = 'Upload failed';
@@ -404,16 +429,12 @@ class _KnowledgeBaseSettingsState
           final d = e.response?.data;
           if (d is Map && d['detail'] != null) {
             msg = 'Upload failed: ${d['detail']}';
-          } else if (e.response?.statusCode != null) {
-            msg = 'Upload failed: server error (${e.response!.statusCode})';
           } else if (e.type == DioExceptionType.receiveTimeout ||
               e.type == DioExceptionType.sendTimeout ||
               e.type == DioExceptionType.connectionTimeout) {
-            msg = 'Upload failed: request timed out — '
-                'the server may still be processing. Try again in a moment.';
+            msg = 'Upload timed out — server may still be processing. Refresh in a moment.';
           } else if (e.type == DioExceptionType.connectionError) {
-            msg = 'Upload failed: could not reach the server. '
-                'Check that the backend is running.';
+            msg = 'Upload failed: could not reach the server.';
           } else {
             msg = 'Upload failed: ${e.message ?? e.type.name}';
           }
@@ -421,9 +442,36 @@ class _KnowledgeBaseSettingsState
           msg = 'Upload failed: $e';
         }
         setState(() {
-          _uploading = false;
-          _uploadError = msg;
+          _picking = false;
+          _pickError = msg;
         });
+      }
+    });
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted) return;
+      bool anyLeft = false;
+      for (final job in _jobs) {
+        if (job.status == 'processing') {
+          anyLeft = true;
+          try {
+            final s = await DocumentService.getJobStatus(job.jobId);
+            if (mounted && s.isTerminal) {
+              setState(() {
+                job.status = s.status;
+                job.error = s.error;
+                job.chunksCreated = s.chunksCreated;
+              });
+            }
+          } catch (_) {}
+        }
+      }
+      if (!anyLeft) {
+        _pollTimer?.cancel();
+        ref.invalidate(documentsNotifierProvider);
       }
     });
   }
@@ -448,53 +496,49 @@ class _KnowledgeBaseSettingsState
               ),
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: _uploading ? null : _pickAndUpload,
+                onTap: (_picking || _anyProcessing) ? null : _pickAndUpload,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  height: 100,
+                  height: 90,
                   decoration: BoxDecoration(
                     color: ArrestoColors.surfaceSoft,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _uploading
+                      color: _picking
                           ? ArrestoColors.orange
                           : ArrestoColors.lineStrong,
                     ),
                   ),
                   child: Center(
-                    child: _uploading
+                    child: _picking
                         ? const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
-                                width: 24,
-                                height: 24,
+                                width: 22, height: 22,
                                 child: CircularProgressIndicator(
-                                    color: ArrestoColors.orange,
-                                    strokeWidth: 2.5),
+                                    color: ArrestoColors.orange, strokeWidth: 2.5),
                               ),
                               SizedBox(height: 8),
-                              Text('Uploading…'),
+                              Text('Sending files…'),
                             ],
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(Icons.cloud_upload_rounded,
-                                  size: 32,
-                                  color: ArrestoColors.textMuted2),
+                                  size: 30, color: ArrestoColors.textMuted2),
                               const SizedBox(height: 6),
-                              Text('Click to upload a file',
-                                  style: ArrestoText.bodyMd()),
-                              Text(
-                                  'PDF, DOCX, PPTX, TXT, CSV',
-                                  style: ArrestoText.small()),
+                              Text('Click to upload files', style: ArrestoText.bodyMd()),
+                              Text('PDF, DOCX, PPTX, TXT, CSV', style: ArrestoText.small()),
                             ],
                           ),
                   ),
                 ),
               ),
-              if (_uploadError != null) ...[
+
+              // Error banner
+              if (_pickError != null) ...[
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -507,34 +551,16 @@ class _KnowledgeBaseSettingsState
                     const Icon(Icons.error_outline_rounded,
                         color: ArrestoColors.red, size: 16),
                     const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(_uploadError!,
-                            style: ArrestoText.small(
-                                color: ArrestoColors.red))),
+                    Expanded(child: Text(_pickError!,
+                        style: ArrestoText.small(color: ArrestoColors.red))),
                   ]),
                 ),
               ],
-              if (_uploadSuccess != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: ArrestoColors.greenSoft,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: ArrestoColors.green
-                            .withValues(alpha: 0.4)),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle_rounded,
-                        color: ArrestoColors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(_uploadSuccess!,
-                            style: ArrestoText.small(
-                                color: ArrestoColors.green))),
-                  ]),
-                ),
+
+              // Per-file progress rows
+              if (_jobs.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                ..._jobs.map((job) => _JobRow(job: job)),
               ],
             ],
           ),
@@ -547,9 +573,7 @@ class _KnowledgeBaseSettingsState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Expanded(
-                    child: Text('Indexed Documents',
-                        style: ArrestoText.h4())),
+                Expanded(child: Text('Indexed Documents', style: ArrestoText.h4())),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded,
                       color: ArrestoColors.textMuted),
@@ -563,8 +587,7 @@ class _KnowledgeBaseSettingsState
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
                   child: Center(
-                    child: CircularProgressIndicator(
-                        color: ArrestoColors.orange),
+                    child: CircularProgressIndicator(color: ArrestoColors.orange),
                   ),
                 ),
                 error: (e, _) => Padding(
@@ -577,9 +600,8 @@ class _KnowledgeBaseSettingsState
                         style: ArrestoText.small(),
                         textAlign: TextAlign.center),
                     TextButton(
-                      onPressed: () => ref
-                          .read(documentsNotifierProvider.notifier)
-                          .refresh(),
+                      onPressed: () =>
+                          ref.read(documentsNotifierProvider.notifier).refresh(),
                       child: const Text('Retry'),
                     ),
                   ]),
@@ -602,66 +624,18 @@ class _KnowledgeBaseSettingsState
                   return Column(
                     children: [
                       Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                             '${docs.length} document${docs.length == 1 ? '' : 's'} · '
                             '${docs.fold(0, (s, d) => s + d.chunkCount)} total chunks',
                             style: ArrestoText.small()),
                       ),
-                      ...docs.map((doc) => Container(
-                            margin:
-                                const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: ArrestoColors.surfaceSoft,
-                              borderRadius:
-                                  BorderRadius.circular(10),
-                              border: Border.all(
-                                  color: ArrestoColors.line),
-                            ),
-                            child: Row(children: [
-                              Container(
-                                padding:
-                                    const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: ArrestoColors.redSoft,
-                                  borderRadius:
-                                      BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  doc.ext,
-                                  style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: ArrestoColors.red),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(doc.displayName,
-                                        style:
-                                            ArrestoText.bodyBold(),
-                                        overflow:
-                                            TextOverflow.ellipsis),
-                                    Text(
-                                        '${doc.chunkCount} chunks',
-                                        style: ArrestoText.xs()),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                  Icons.check_circle_rounded,
-                                  color: ArrestoColors.green,
-                                  size: 16),
-                            ]),
-                          )),
+                      ...docs.map((doc) => _DocumentRow(
+                        doc: doc,
+                        onDeleted: () => ref
+                            .read(documentsNotifierProvider.notifier)
+                            .refresh(),
+                      )),
                     ],
                   );
                 },
@@ -670,6 +644,352 @@ class _KnowledgeBaseSettingsState
           ),
         ),
       ],
+    );
+  }
+}
+
+class _JobRow extends StatelessWidget {
+  final _FileJob job;
+  const _JobRow({required this.job});
+
+  @override
+  Widget build(BuildContext context) {
+    final isProcessing = job.status == 'processing';
+    final isComplete   = job.status == 'completed';
+
+    final Color statusColor = isComplete
+        ? ArrestoColors.green
+        : isProcessing
+            ? ArrestoColors.orange
+            : ArrestoColors.red;
+
+    final Widget statusIcon = isProcessing
+        ? const SizedBox(
+            width: 14, height: 14,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.orange, strokeWidth: 2))
+        : Icon(
+            isComplete
+                ? Icons.check_circle_rounded
+                : Icons.error_outline_rounded,
+            color: statusColor,
+            size: 16,
+          );
+
+    final String statusLabel = isProcessing
+        ? 'Processing…'
+        : isComplete
+            ? '${job.chunksCreated ?? 0} chunks indexed'
+            : job.error ?? 'Failed';
+
+    final display = job.filename.length > 44
+        ? '…${job.filename.substring(job.filename.length - 42)}'
+        : job.filename;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isComplete
+            ? ArrestoColors.greenSoft
+            : isProcessing
+                ? ArrestoColors.amberSoft
+                : ArrestoColors.redSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        statusIcon,
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(display,
+                  style: ArrestoText.bodyBold(),
+                  overflow: TextOverflow.ellipsis),
+              Text(statusLabel, style: ArrestoText.xs(color: statusColor)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Document Row ──────────────────────────────────────────────────────────────
+
+class _DocumentRow extends StatefulWidget {
+  final DocumentInfo doc;
+  final VoidCallback onDeleted;
+  const _DocumentRow({required this.doc, required this.onDeleted});
+
+  @override
+  State<_DocumentRow> createState() => _DocumentRowState();
+}
+
+class _DocumentRowState extends State<_DocumentRow> {
+  bool _openingFile = false;
+  bool _deleting = false;
+
+  void _viewText() {
+    showDialog(
+      context: context,
+      builder: (_) => _TextViewerDialog(doc: widget.doc),
+    );
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ArrestoColors.surface,
+        title: Text('Remove document?', style: ArrestoText.h4()),
+        content: Text(
+          'This will permanently remove "${widget.doc.displayName}" and all '
+          'its indexed chunks from the knowledge base.',
+          style: ArrestoText.body(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: ArrestoColors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await DocumentService.deleteDocument(widget.doc.sourceFile);
+      if (!mounted) return;
+      widget.onDeleted();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('"${widget.doc.displayName}" removed from knowledge base.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  Future<void> _openFile() async {
+    setState(() => _openingFile = true);
+    try {
+      final result = await DocumentService.getFileBytes(widget.doc.sourceFile);
+      final blob = html.Blob([result.bytes], result.mimeType);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.window.open(url, '_blank');
+      Future.delayed(
+        const Duration(seconds: 60),
+        () => html.Url.revokeObjectUrl(url),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open file: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingFile = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: ArrestoColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: ArrestoColors.line),
+      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: ArrestoColors.redSoft,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            widget.doc.ext,
+            style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: ArrestoColors.red),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.doc.displayName,
+                  style: ArrestoText.bodyBold(),
+                  overflow: TextOverflow.ellipsis),
+              Text('${widget.doc.chunkCount} chunks',
+                  style: ArrestoText.xs()),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.article_rounded, size: 18),
+          color: ArrestoColors.textMuted,
+          tooltip: 'View extracted text',
+          onPressed: _viewText,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        if (_openingFile)
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.orange, strokeWidth: 2),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            color: ArrestoColors.textMuted,
+            tooltip: 'Open original file',
+            onPressed: _openFile,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        if (_deleting)
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: ArrestoColors.red, strokeWidth: 2),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            color: ArrestoColors.red,
+            tooltip: 'Remove from knowledge base',
+            onPressed: _delete,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+      ]),
+    );
+  }
+}
+
+// ── Text Viewer Dialog ────────────────────────────────────────────────────────
+
+class _TextViewerDialog extends StatefulWidget {
+  final DocumentInfo doc;
+  const _TextViewerDialog({required this.doc});
+
+  @override
+  State<_TextViewerDialog> createState() => _TextViewerDialogState();
+}
+
+class _TextViewerDialogState extends State<_TextViewerDialog> {
+  DocumentContent? _content;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final content =
+          await DocumentService.getDocumentContent(widget.doc.sourceFile);
+      if (mounted) setState(() => _content = content);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: ArrestoColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 620),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 12, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.doc.displayName,
+                          style: ArrestoText.h4(),
+                          overflow: TextOverflow.ellipsis),
+                      if (_content != null)
+                        Text(
+                          '${_content!.totalChunks} chunks · '
+                          '${_content!.assetType.toUpperCase()}',
+                          style: ArrestoText.small(),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: ArrestoColors.line),
+            Expanded(
+              child: _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text('Failed to load: $_error',
+                            style: ArrestoText.small(
+                                color: ArrestoColors.red),
+                            textAlign: TextAlign.center),
+                      ),
+                    )
+                  : _content == null
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: ArrestoColors.orange),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: SelectableText(
+                            _content!.fullText,
+                            style: ArrestoText.mono()
+                                .copyWith(fontSize: 13, height: 1.65),
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

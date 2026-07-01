@@ -94,7 +94,7 @@ class _DailyQuestionScreenState extends State<DailyQuestionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Question of the Day',
-                style: ArrestoText.base(color: ArrestoColors.ink)
+                style: ArrestoText.base(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             Text(widget.courseTitle,
                 style: ArrestoText.xs(color: ArrestoColors.textMuted)),
@@ -184,7 +184,7 @@ class _QuestionView extends StatelessWidget {
             ),
             child: Text(
               question.questionText,
-              style: ArrestoText.lg(color: ArrestoColors.ink)
+              style: ArrestoText.lg(color: ArrestoColors.textPrimary)
                   .copyWith(fontWeight: FontWeight.w600, height: 1.5),
             ),
           ),
@@ -216,7 +216,7 @@ class _QuestionView extends StatelessWidget {
             } else if (i == selected) {
               bg = ArrestoColors.amberSoft;
               border = ArrestoColors.amberStrong;
-              textColor = ArrestoColors.ink;
+              textColor = ArrestoColors.textPrimary;
             }
 
             return GestureDetector(
@@ -316,7 +316,7 @@ class _QuestionView extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: ArrestoColors.ink,
+                color: ArrestoColors.amberSoft,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -364,7 +364,7 @@ class _QuestionView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10)),
                 ),
                 child: Text('Submit Answer',
-                    style: ArrestoText.base(color: Colors.white)
+                    style: ArrestoText.base(color: ArrestoColors.ink)
                         .copyWith(fontWeight: FontWeight.w700)),
               ),
             ),
@@ -392,7 +392,7 @@ class _ErrorView extends StatelessWidget {
                 size: 48, color: ArrestoColors.red),
             const SizedBox(height: 12),
             Text('Could not load question',
-                style: ArrestoText.lg(color: ArrestoColors.ink)
+                style: ArrestoText.lg(color: ArrestoColors.textPrimary)
                     .copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(error,

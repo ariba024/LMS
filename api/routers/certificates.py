@@ -12,6 +12,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from api.config import settings
 from api.db import SessionLocal
 from api.dependencies import get_current_user
 from api.models.progress import AssessmentAttemptRow
@@ -190,4 +191,42 @@ def download_certificate(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{attempt_id}/email", status_code=204)
+def email_certificate(
+    attempt_id: str,
+    current_user: UserRow = Depends(get_current_user),
+):
+    """Send the certificate download link to the learner's registered email."""
+    from api.email_service import send_certificate_email, is_configured
+
+    if not is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email is not configured on this server. Download the certificate manually.",
+        )
+
+    with SessionLocal() as db:
+        attempt = db.get(AssessmentAttemptRow, attempt_id)
+        if attempt is None:
+            raise HTTPException(status_code=404, detail="Attempt not found.")
+        if not attempt.passed:
+            raise HTTPException(status_code=400, detail="This attempt did not pass.")
+        if current_user.role != "admin" and attempt.learner_id != current_user.email:
+            raise HTTPException(status_code=403, detail="Access denied.")
+        course = db.get(CourseScriptRow, attempt.script_id)
+        course_title = course.course_title if course else attempt.script_id
+
+    learner_name = (
+        current_user.display_name
+        or current_user.email.split("@")[0].replace(".", " ").replace("_", " ").title()
+    )
+    download_link = f"{settings.app_base_url}/api/v1/certificates/{attempt_id}"
+    send_certificate_email(
+        to=current_user.email,
+        learner_name=learner_name,
+        course_title=course_title,
+        cert_download_link=download_link,
     )

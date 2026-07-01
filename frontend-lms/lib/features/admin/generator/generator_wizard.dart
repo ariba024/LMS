@@ -94,7 +94,8 @@ class _CourseGeneratorWizardState
       setState(() { _published = true; _publishing = false; });
 
       // Queue video generation for all lessons (fire-and-forget)
-      if (_publishModeApi != 'draft') {
+      // Skipped when user chose 'No Video' — they can generate later from the course page.
+      if (_publishModeApi != 'draft' && _videoStyle != 'none') {
         final langCode = _langCode[_language] ?? 'en';
         VideoService.generateAll(_scriptId!, style: _videoStyle, lang: langCode, voice: _videoVoice)
             .then((count) {
@@ -399,6 +400,7 @@ class _CourseGeneratorWizardState
           transcriptVoice: _transcriptVoice,
           videoVoice: _videoVoice,
           courseScript: _courseScript,
+          scriptId: _scriptId,
         ),
       7 => _StepAssessment(scriptId: _scriptId),
       8 => _StepPublish(
@@ -1915,6 +1917,10 @@ class _StepScriptState extends State<_StepScript> {
         durationRange: widget.courseLength,
       );
 
+      // Register the job ID immediately — before polling — so navigating away
+      // from this step doesn't lose the ID when the widget unmounts.
+      widget.onScriptId(jobId);
+
       // Poll until completed or failed
       while (mounted) {
         await Future.delayed(const Duration(seconds: 2));
@@ -1942,7 +1948,6 @@ class _StepScriptState extends State<_StepScript> {
             _courseScript = script;
           });
           if (script != null) widget.onComplete(script);
-          widget.onScriptId(jobId);
           break;
         } else if (raw == 'failed') {
           setState(() {
@@ -2241,13 +2246,16 @@ class _StepStyleState extends State<_StepStyle> {
 
   // (display label, description, CourseStyle, video style id)
   static const _styles = [
-    ('Animated Scene', 'Professional animated video with voiceover (HeyGen)',
+    ('Avatar Presenter', 'AI talking-head avatar with narration (HeyGen)',
+        CourseStyle.hybrid,     'hybrid'),
+    ('Animated Scene', 'Voice-over video with animated background (HeyGen)',
         CourseStyle.animated,   'animated_scene'),
-    ('Whiteboard Doodle', 'Hand-drawn whiteboard animation (HeyGen)',
+    ('Whiteboard', 'Hand-drawn whiteboard animation · Free',
         CourseStyle.whiteboard, 'whiteboard_doodle'),
-    ('AI Presenter', 'Free animated renderer · No API key required',
+    ('Animated Slides', 'Motion-graphics slide deck · Free',
         CourseStyle.claude,     'modern'),
-    ('Hybrid', 'Mix of animated and live action (HeyGen)', CourseStyle.hybrid, 'hybrid'),
+    ('No Video', 'Publish now — generate videos later from the course page',
+        CourseStyle.none,       'none'),
   ];
 
   @override
@@ -2349,6 +2357,59 @@ class _StepStyleState extends State<_StepStyle> {
             );
           },
         ),
+        if (_styles[_selected].$4 == 'none') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBDBDBD)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF616161)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Course will be published without videos. '
+                    'To generate videos later, open the course from the Courses page.',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF616161), height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (_styles[_selected].$4 == 'hybrid' ||
+                   _styles[_selected].$4 == 'animated_scene') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: const Color(0xFFFFCC02).withValues(alpha: 0.5)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 16, color: Color(0xFF856404)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Requires HEYGEN_API_KEY — set it in .env to enable this style.',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF856404), height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2457,7 +2518,7 @@ class _StepLanguageState extends State<_StepLanguage> {
                                       ? FontWeight.w700
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? ArrestoColors.ink
+                                      ? ArrestoColors.amberStrong
                                       : ArrestoColors.textSecondary,
                                 ),
                                 overflow: TextOverflow.ellipsis),
@@ -2704,6 +2765,7 @@ class _StepReview extends StatefulWidget {
   final String transcriptVoice;
   final String videoVoice;
   final Map<String, dynamic>? courseScript;
+  final String? scriptId;
 
   const _StepReview({
     required this.title,
@@ -2715,6 +2777,7 @@ class _StepReview extends StatefulWidget {
     required this.transcriptVoice,
     required this.videoVoice,
     this.courseScript,
+    this.scriptId,
   });
 
   @override
@@ -2727,16 +2790,16 @@ class _StepReviewState extends State<_StepReview> {
 
   static const _styleLabels = {
     'animated_scene':    'Animated Scene',
-    'whiteboard_doodle': 'Whiteboard Doodle',
-    'modern':            'AI Presenter',
-    'hybrid':            'Hybrid',
+    'whiteboard_doodle': 'Whiteboard',
+    'modern':            'Animated Slides',
+    'hybrid':            'Avatar Presenter',
   };
 
   static const _styleIcons = {
     'animated_scene':    Icons.animation_rounded,
     'whiteboard_doodle': Icons.draw_rounded,
-    'modern':            Icons.smart_display_rounded,
-    'hybrid':            Icons.auto_awesome_rounded,
+    'modern':            Icons.slideshow_rounded,
+    'hybrid':            Icons.record_voice_over_rounded,
   };
 
   static const _styleToThumb = {
@@ -2812,10 +2875,13 @@ class _StepReviewState extends State<_StepReview> {
         // ── No-script warning ───────────────────────────────────────────────
         if (!hasScript) ...[
           _WarningBanner(
-            icon: Icons.warning_amber_rounded,
+            icon: widget.scriptId != null
+                ? Icons.hourglass_top_rounded
+                : Icons.warning_amber_rounded,
             color: const Color(0xFFF59E0B),
-            message:
-                'Script not generated yet — go back to Step 4 (Script) and generate the course script first.',
+            message: widget.scriptId != null
+                ? 'Script is still generating — check Step 4 for progress before publishing.'
+                : 'Script not generated yet — go back to Step 4 (Script) and generate the course script first.',
           ),
           const SizedBox(height: 16),
         ],
@@ -3397,9 +3463,15 @@ class _StepPublish extends StatelessWidget {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: assignLabel,
+            dropdownColor: ArrestoColors.surface,
+            style: ArrestoText.body(color: ArrestoColors.textPrimary),
             decoration: const InputDecoration(),
             items: _assignLabels
-                .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                .map((l) => DropdownMenuItem(
+                    value: l,
+                    child: Text(l,
+                        style: ArrestoText.body(
+                            color: ArrestoColors.textPrimary))))
                 .toList(),
             onChanged: (label) {
               if (label == null) return;
@@ -3422,7 +3494,7 @@ class _StepPublish extends StatelessWidget {
         children: [
           Expanded(
               child: Text(label,
-                  style: ArrestoText.body(color: ArrestoColors.ink))),
+                  style: ArrestoText.body(color: ArrestoColors.textPrimary))),
           Switch(
             value: value,
             onChanged: onChanged,

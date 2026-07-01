@@ -1,3 +1,24 @@
+class WeakTopic {
+  final String courseId;
+  final String topic;
+  final double accuracy;
+  final int totalAttempts;
+
+  const WeakTopic({
+    required this.courseId,
+    required this.topic,
+    required this.accuracy,
+    required this.totalAttempts,
+  });
+
+  factory WeakTopic.fromJson(Map<String, dynamic> j) => WeakTopic(
+        courseId:     j['course_id']     as String,
+        topic:        j['topic']         as String,
+        accuracy:     (j['accuracy'] as num).toDouble(),
+        totalAttempts: j['total_attempts'] as int,
+      );
+}
+
 class Learner {
   final String id;
   final String name;

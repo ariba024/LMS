@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/arresto_card.dart';
 import '../../../core/widgets/badge.dart';
 import '../../../core/widgets/progress_bar.dart';
@@ -21,20 +21,32 @@ class LearnersScreen extends ConsumerStatefulWidget {
 }
 
 class _LearnersScreenState extends ConsumerState<LearnersScreen> {
-  String _search = '';
+  // _backendQuery drives the actual API call; updated after 400 ms debounce.
+  // _filter is client-side (Active/Inactive) applied to the returned list.
+  String _backendQuery = '';
   String _filter = 'All';
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearch(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _backendQuery = v.trim());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final learners = ref.watch(learnersApiProvider).valueOrNull ?? [];
-    final filtered = learners.where((l) {
-      final matchSearch = _search.isEmpty ||
-          l.name.toLowerCase().contains(_search.toLowerCase()) ||
-          l.email.toLowerCase().contains(_search.toLowerCase());
-      final matchFilter =
-          _filter == 'All' || l.status == _filter;
-      return matchSearch && matchFilter;
-    }).toList();
+    final learnersAsync = ref.watch(learnersApiProvider(_backendQuery));
+    final learners = learnersAsync.valueOrNull ?? [];
+    final filtered = _filter == 'All'
+        ? learners
+        : learners.where((l) => l.status == _filter).toList();
 
     return Scaffold(
       backgroundColor: ArrestoColors.background,
@@ -46,11 +58,13 @@ class _LearnersScreenState extends ConsumerState<LearnersScreen> {
             SectionHeader(
               icon: Icons.people_rounded,
               title: 'Learner Management',
-              subtitle: '${learners.length} total learners',
+              subtitle: _backendQuery.isEmpty
+                  ? '${learners.length} total learners'
+                  : '${learners.length} matching "${_backendQuery}"',
             ),
             const SizedBox(height: 20),
 
-            // Stats
+            // Stats strip
             LayoutBuilder(builder: (ctx, c) {
               final cols   = c.maxWidth > 800 ? 4 : 2;
               final total  = learners.length;
@@ -96,19 +110,18 @@ class _LearnersScreenState extends ConsumerState<LearnersScreen> {
             }),
             const SizedBox(height: 20),
 
-            // Filters
+            // Search + status filter
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    onChanged: (v) => setState(() => _search = v),
+                    onChanged: _onSearch,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.search_rounded,
                           color: ArrestoColors.textMuted),
-                      hintText: 'Search learners...',
+                      hintText: 'Search by name or email...',
                       border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.all(Radius.circular(999)),
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
                       ),
                     ),
                   ),
@@ -128,7 +141,7 @@ class _LearnersScreenState extends ConsumerState<LearnersScreen> {
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
-                  // Header
+                  // Header row
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
@@ -156,7 +169,27 @@ class _LearnersScreenState extends ConsumerState<LearnersScreen> {
                     ),
                   ),
                   const Divider(height: 1, color: ArrestoColors.line),
-                  ...filtered.map((l) => _LearnerRow(learner: l)),
+
+                  if (learnersAsync.isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (filtered.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Text(
+                          _backendQuery.isNotEmpty
+                              ? 'No learners match "$_backendQuery".'
+                              : 'No learners found.',
+                          style: ArrestoText.body(
+                              color: ArrestoColors.textMuted),
+                        ),
+                      ),
+                    )
+                  else
+                    ...filtered.map((l) => _LearnerRow(learner: l)),
                 ],
               ),
             ),
@@ -181,8 +214,7 @@ class _LearnerRow extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () =>
-              context.go('/admin/learners/${learner.id}'),
+          onTap: () => context.go('/admin/learners/${learner.id}'),
           child: Padding(
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 12),
@@ -192,13 +224,11 @@ class _LearnerRow extends StatelessWidget {
                   flex: 2,
                   child: Row(
                     children: [
-                      ArrestoAvatar(
-                          name: learner.name, size: 36),
+                      ArrestoAvatar(name: learner.name, size: 36),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(learner.name,
                                 style: ArrestoText.bodyBold(),
@@ -215,7 +245,7 @@ class _LearnerRow extends StatelessWidget {
                 Expanded(
                     child: Text('${learner.enrolled}',
                         style: ArrestoText.body(
-                            color: ArrestoColors.ink))),
+                            color: ArrestoColors.textPrimary))),
                 Expanded(
                   flex: 2,
                   child: Row(
@@ -235,12 +265,10 @@ class _LearnerRow extends StatelessWidget {
                 Expanded(
                     child: Text(learner.lastActive,
                         style: ArrestoText.small())),
-                Expanded(
-                    child:
-                        StatusBadge(status: learner.status)),
+                Expanded(child: StatusBadge(status: learner.status)),
                 TextButton(
-                  onPressed: () => context
-                      .go('/admin/learners/${learner.id}'),
+                  onPressed: () =>
+                      context.go('/admin/learners/${learner.id}'),
                   child: Text('View',
                       style: ArrestoText.small(
                               color: ArrestoColors.orange)

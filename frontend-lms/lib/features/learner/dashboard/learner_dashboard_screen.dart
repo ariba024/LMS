@@ -1,3 +1,4 @@
+import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,10 +22,23 @@ class LearnerDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use live library; fall back to empty list while loading so UI still builds
-    final courses = ref.watch(libraryProvider).valueOrNull ?? [];
+    final allCourses = ref.watch(libraryProvider).valueOrNull ?? [];
+    final progressMap = ref.watch(courseProgressSummaryProvider).valueOrNull ?? {};
+
+    // Merge backend progress percentages into course objects
+    final courses = allCourses.map((c) {
+      final pct = progressMap[c.id] ?? 0;
+      return pct > 0 ? c.copyWith(progress: pct) : c;
+    }).toList();
+
     final enrolledCourses =
         courses.where((c) => c.progress > 0 && c.progress < 100).toList();
+
+    final avgProgress = progressMap.isEmpty
+        ? 0
+        : progressMap.values.reduce((a, b) => a + b) ~/
+            max(1, progressMap.values.length);
+
     final isWide = MediaQuery.of(context).size.width >= 1024;
 
     return SingleChildScrollView(
@@ -57,16 +71,14 @@ class LearnerDashboardScreen extends ConsumerWidget {
                           children: [
                             _ContinueCourses(courses: enrolledCourses),
                             const SizedBox(height: ArrestoSpacing.xl),
-                            _RecommendedSection(courses: courses
-                                .where((c) => c.progress == 0)
-                                .toList()),
+                            _buildRecommended(courses),
                           ],
                         ),
                       ),
                       const SizedBox(width: ArrestoSpacing.xl),
                       SizedBox(
                           width: 300,
-                          child: _RightSidebar(courses: enrolledCourses)),
+                          child: _RightSidebar(courses: enrolledCourses, avgProgress: avgProgress)),
                     ],
                   )
                 : Column(
@@ -74,12 +86,28 @@ class LearnerDashboardScreen extends ConsumerWidget {
                     children: [
                       _ContinueCourses(courses: enrolledCourses),
                       const SizedBox(height: ArrestoSpacing.xl),
-                      _RightSidebar(courses: enrolledCourses),
+                      _buildRecommended(courses),
+                      const SizedBox(height: ArrestoSpacing.xl),
+                      _RightSidebar(courses: enrolledCourses, avgProgress: avgProgress),
                     ],
                   ),
           ],
         ),
       );
+  }
+
+  Widget _buildRecommended(List<Course> courses) {
+    final inProgress = courses
+        .where((c) => c.progress > 0 && c.progress < 100)
+        .toList()
+      ..sort((a, b) => a.progress.compareTo(b.progress));
+    final recommended = inProgress.isNotEmpty
+        ? inProgress.take(3).toList()
+        : courses.where((c) => c.progress == 0).take(5).toList();
+    return _RecommendedSection(
+      courses: recommended,
+      title: inProgress.isNotEmpty ? 'Continue Learning' : 'Recommended for you',
+    );
   }
 }
 
@@ -174,6 +202,7 @@ class _StatsStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final coursesAsync = ref.watch(libraryProvider);
     final historyAsync = ref.watch(assessmentHistoryProvider);
+    final statsAsync = ref.watch(gamificationStatsProvider);
 
     final courseCount = coursesAsync.maybeWhen(
       data: (c) => '${c.length}',
@@ -186,6 +215,14 @@ class _StatsStrip extends ConsumerWidget {
         ).length;
         return '$passed';
       },
+      orElse: () => '—',
+    );
+    final lessonsCompleted = statsAsync.maybeWhen(
+      data: (s) => '${s.totalLessonsCompleted}',
+      orElse: () => '—',
+    );
+    final streak = statsAsync.maybeWhen(
+      data: (s) => s.maxStreak > 0 ? '${s.maxStreak}d' : '0',
       orElse: () => '—',
     );
 
@@ -211,9 +248,9 @@ class _StatsStrip extends ConsumerWidget {
               iconColor: ArrestoColors.amber,
               barColor: ArrestoColors.amber,
             ),
-            const StatCard(
+            StatCard(
               title: 'Lessons Completed',
-              value: '—',
+              value: lessonsCompleted,
               icon: Icons.check_circle_rounded,
               iconColor: ArrestoColors.green,
               barColor: ArrestoColors.green,
@@ -225,9 +262,9 @@ class _StatsStrip extends ConsumerWidget {
               iconColor: ArrestoColors.orange,
               barColor: ArrestoColors.orange,
             ),
-            const StatCard(
+            StatCard(
               title: 'Learning Streak',
-              value: '—',
+              value: streak,
               icon: Icons.local_fire_department_rounded,
               iconColor: ArrestoColors.red,
               barColor: ArrestoColors.red,
@@ -363,7 +400,8 @@ class _CourseCard extends StatelessWidget {
 
 class _RecommendedSection extends StatelessWidget {
   final List<Course> courses;
-  const _RecommendedSection({required this.courses});
+  final String title;
+  const _RecommendedSection({required this.courses, this.title = 'Recommended for you'});
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +410,7 @@ class _RecommendedSection extends StatelessWidget {
       children: [
         SectionHeader(
           icon: Icons.recommend_rounded,
-          title: 'Recommended for you',
+          title: title,
           subtitle: 'Based on your learning history',
         ),
         const SizedBox(height: 14),
@@ -450,29 +488,30 @@ class _MiniCourseCard extends StatelessWidget {
 
 class _RightSidebar extends StatelessWidget {
   final List<Course> courses;
-  const _RightSidebar({required this.courses});
+  final int avgProgress;
+  const _RightSidebar({required this.courses, required this.avgProgress});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Progress donut card
+        // Progress donut card — real average across all enrolled courses
         ArrestoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Overall Progress', style: ArrestoText.h4()),
               const SizedBox(height: 16),
-              Center(child: _DonutChart(percent: 68)),
+              Center(child: _DonutChart(percent: avgProgress)),
               const SizedBox(height: 12),
-              const AnimatedArrestoProgressBar(value: 0.68),
+              AnimatedArrestoProgressBar(value: avgProgress / 100),
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Completed', style: ArrestoText.small()),
-                  Text('68%',
+                  Text('Avg across courses', style: ArrestoText.small()),
+                  Text('$avgProgress%',
                       style: ArrestoText.small(color: ArrestoColors.amber)
                           .copyWith(fontWeight: FontWeight.w700)),
                 ],
@@ -482,28 +521,28 @@ class _RightSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // Upcoming deadlines
+        // In-progress courses — replaces fake "Upcoming Deadlines"
         ArrestoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.calendar_today_rounded,
+                  const Icon(Icons.play_circle_outline_rounded,
                       size: 16, color: ArrestoColors.orange),
                   const SizedBox(width: 6),
-                  Text('Upcoming Deadlines', style: ArrestoText.h4()),
+                  Text('In Progress', style: ArrestoText.h4()),
                 ],
               ),
               const SizedBox(height: 12),
-              _deadline(
-                  'WAH Assessment', '3 days left', ArrestoColors.orange),
-              const SizedBox(height: 8),
-              _deadline(
-                  'Harness Inspection Quiz', '1 week', ArrestoColors.green),
-              const SizedBox(height: 8),
-              _deadline(
-                  'Site Safety Module 5', '2 weeks', ArrestoColors.textMuted),
+              if (courses.isEmpty)
+                Text('No courses started yet.',
+                    style: ArrestoText.bodySm(color: ArrestoColors.textMuted))
+              else
+                ...courses.take(4).map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _courseRow(context, c),
+                    )),
             ],
           ),
         ),
@@ -571,21 +610,41 @@ class _RightSidebar extends StatelessWidget {
     );
   }
 
-  Widget _deadline(String title, String time, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration:
-              BoxDecoration(color: color, shape: BoxShape.circle),
+  Widget _courseRow(BuildContext context, Course c) {
+    return InkWell(
+      onTap: () => context.go('/learner/course/${c.id}'),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(c.title,
+                      style: ArrestoText.bodySm(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(
+                    value: c.progress / 100,
+                    backgroundColor: ArrestoColors.line,
+                    valueColor:
+                        const AlwaysStoppedAnimation(ArrestoColors.amber),
+                    minHeight: 4,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('${c.progress}%',
+                style: ArrestoText.xs(color: ArrestoColors.amber)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-            child: Text(title,
-                style: ArrestoText.bodySm(color: ArrestoColors.ink))),
-        Text(time, style: ArrestoText.xs(color: color)),
-      ],
+      ),
     );
   }
 }

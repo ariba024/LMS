@@ -26,6 +26,7 @@ class _MyCoursesScreenState extends ConsumerState<MyCoursesScreen> {
   @override
   Widget build(BuildContext context) {
     final libraryAsync = ref.watch(libraryProvider);
+    final enrolledIds = ref.watch(enrolledCourseIdsProvider).valueOrNull ?? const <String>{};
 
     return libraryAsync.when(
         loading: () => const Center(
@@ -39,19 +40,25 @@ class _MyCoursesScreenState extends ConsumerState<MyCoursesScreen> {
             Text('Could not load courses', style: ArrestoText.bodyMd()),
             const SizedBox(height: 16),
             TextButton(
-              onPressed: () => ref.invalidate(libraryProvider),
+              onPressed: () {
+                ref.invalidate(libraryProvider);
+                ref.invalidate(enrolledCourseIdsProvider);
+              },
               child: const Text('Retry'),
             ),
           ]),
         ),
-        data: (all) => _buildContent(context, all),
+        data: (all) => _buildContent(context, all, enrolledIds),
       );
   }
 
-  Widget _buildContent(BuildContext context, List<Course> all) {
-    // Since the backend doesn't track per-learner progress yet,
-    // all library courses are treated as available. Progress is 0 by default.
-    final enrolled = all.toList();
+  Widget _buildContent(BuildContext context, List<Course> all, Set<String> enrolledIds) {
+    // Filter to courses the learner has started (has a lesson_record row).
+    // Empty enrolledIds means no progress yet — show the empty/onboarding state.
+    final enrolled = enrolledIds.isEmpty
+        ? <Course>[]
+        : all.where((c) => enrolledIds.contains(c.id)).toList();
+
     final completed = enrolled.where((c) => c.progress == 100).toList();
     final inProgress =
         enrolled.where((c) => c.progress > 0 && c.progress < 100).toList();
@@ -78,7 +85,7 @@ class _MyCoursesScreenState extends ConsumerState<MyCoursesScreen> {
                 ),
                 const SizedBox(height: 16),
                 Row(children: [
-                  _strip('${enrolled.length}', 'Available',
+                  _strip('${enrolled.length}', 'Enrolled',
                       ArrestoColors.amber),
                   const SizedBox(width: 10),
                   _strip('${inProgress.length}', 'In Progress',
@@ -102,7 +109,10 @@ class _MyCoursesScreenState extends ConsumerState<MyCoursesScreen> {
                     icon: const Icon(Icons.refresh_rounded,
                         color: ArrestoColors.textMuted, size: 18),
                     tooltip: 'Refresh',
-                    onPressed: () => ref.invalidate(libraryProvider),
+                    onPressed: () {
+                      ref.invalidate(libraryProvider);
+                      ref.invalidate(enrolledCourseIdsProvider);
+                    },
                   ),
                 ]),
                 const SizedBox(height: 12),
@@ -118,8 +128,8 @@ class _MyCoursesScreenState extends ConsumerState<MyCoursesScreen> {
                     color: ArrestoColors.textMuted2, size: 48),
                 const SizedBox(height: 12),
                 Text(
-                  all.isEmpty
-                      ? 'No courses published yet.\nAsk your admin to generate some!'
+                  enrolled.isEmpty
+                      ? 'No courses started yet.\nVisit the Catalog to get started!'
                       : 'No courses match the selected filter.',
                   style: ArrestoText.body(),
                   textAlign: TextAlign.center,

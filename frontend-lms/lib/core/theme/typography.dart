@@ -9,7 +9,7 @@ class ArrestoText {
         fontSize: 26,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.3,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
@@ -17,21 +17,21 @@ class ArrestoText {
         fontSize: 21,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.2,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
   static TextStyle h3({Color? color}) => GoogleFonts.inter(
         fontSize: 16,
         fontWeight: FontWeight.w700,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
   static TextStyle h4({Color? color}) => GoogleFonts.inter(
         fontSize: 15,
         fontWeight: FontWeight.w700,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
@@ -52,14 +52,14 @@ class ArrestoText {
   static TextStyle bodySm({Color? color}) => GoogleFonts.inter(
         fontSize: 13,
         fontWeight: FontWeight.w400,
-        color: color ?? ArrestoColors.textMuted,
+        color: color ?? ArrestoColors.textSecondary,
         decoration: TextDecoration.none,
       );
 
   static TextStyle bodyBold({Color? color}) => GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
@@ -80,7 +80,7 @@ class ArrestoText {
   static TextStyle xs({Color? color}) => GoogleFonts.inter(
         fontSize: 11,
         fontWeight: FontWeight.w500,
-        color: color ?? ArrestoColors.textMuted2,
+        color: color ?? ArrestoColors.textSecondary,
         decoration: TextDecoration.none,
       );
 
@@ -88,21 +88,21 @@ class ArrestoText {
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.0,
-        color: color ?? ArrestoColors.orange,
+        color: color ?? ArrestoColors.amber,
         decoration: TextDecoration.none,
       );
 
   static TextStyle stat({Color? color}) => GoogleFonts.inter(
         fontSize: 28,
         fontWeight: FontWeight.w800,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
   static TextStyle statLg({Color? color}) => GoogleFonts.inter(
         fontSize: 36,
         fontWeight: FontWeight.w800,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 
@@ -139,7 +139,7 @@ class ArrestoText {
   static TextStyle lg({Color? color}) => GoogleFonts.inter(
         fontSize: 16,
         fontWeight: FontWeight.w600,
-        color: color ?? ArrestoColors.ink,
+        color: color ?? ArrestoColors.textPrimary,
         decoration: TextDecoration.none,
       );
 }

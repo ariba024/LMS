@@ -222,4 +222,57 @@ class AssessmentService {
         .map((a) => AssessmentAttempt.fromJson(a as Map<String, dynamic>))
         .toList();
   }
+
+  /// Admin: all learners' attempts for a course (no learner_id filter).
+  static Future<List<AdminAssessmentResult>> getAdminAttempts(
+    String courseId,
+  ) async {
+    final resp = await apiClient.get(
+      '/api/v1/courses/library/$courseId/assessment-attempts',
+    );
+    final list = resp.data['attempts'] as List;
+    return list
+        .map((a) => AdminAssessmentResult.fromJson(a as Map<String, dynamic>))
+        .toList();
+  }
+}
+
+class AdminAssessmentResult {
+  final String id;
+  final String learnerId;
+  final int score;
+  final bool passed;
+  final int correct;
+  final int total;
+  final double takenAt;
+
+  const AdminAssessmentResult({
+    required this.id,
+    required this.learnerId,
+    required this.score,
+    required this.passed,
+    required this.correct,
+    required this.total,
+    required this.takenAt,
+  });
+
+  factory AdminAssessmentResult.fromJson(Map<String, dynamic> j) =>
+      AdminAssessmentResult(
+        id:        j['id'] as String,
+        learnerId: j['learner_id'] as String? ?? '',
+        score:     (j['score'] as num).toInt(),
+        passed:    j['passed'] as bool,
+        correct:   (j['correct'] as num).toInt(),
+        total:     (j['total'] as num).toInt(),
+        takenAt:   (j['taken_at'] as num).toDouble(),
+      );
+
+  String get formattedDate {
+    final dt = DateTime.fromMillisecondsSinceEpoch((takenAt * 1000).round());
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
 }

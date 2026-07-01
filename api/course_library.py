@@ -39,6 +39,9 @@ class CourseLibrary:
         use_knowledge_base: bool = False,
         language:           str = "English",
         difficulty:         str = "",
+        course_format:      str = "standard",
+        duration_range:     str = "",
+        user_instructions:  str | None = None,
     ) -> dict:
         """
         Persist a completed course script.
@@ -47,6 +50,14 @@ class CourseLibrary:
         """
         generated_at = time.time()
         duration_min = course_script.get("estimated_total_duration_min", 0)
+        if not duration_min:
+            word_count = 0
+            for _mod in course_script.get("modules", []):
+                for _les in _mod.get("lessons", []):
+                    word_count += len((_les.get("narration_script") or "").split())
+            for _item in course_script.get("items", []):
+                word_count += len((_item.get("narration") or _item.get("narration_script") or "").split())
+            duration_min = max(1, round(word_count / 150)) if word_count else 0
 
         if course_script.get("items"):
             total_lessons = sum(
@@ -77,6 +88,9 @@ class CourseLibrary:
             row.course_script_json     = json.dumps(course_script, ensure_ascii=False)
             row.language               = language
             row.difficulty             = difficulty
+            row.course_format          = course_format
+            row.duration_range         = duration_range
+            row.user_instructions      = user_instructions
             db.commit()
             # Build the return dict from the values we just wrote rather than
             # accessing ORM attributes after commit (expire_on_commit=True marks
@@ -94,6 +108,9 @@ class CourseLibrary:
                 "estimated_duration_min":   duration_min,
                 "language":                 language,
                 "difficulty":               difficulty,
+                "course_format":            course_format,
+                "duration_range":           duration_range,
+                "user_instructions":        user_instructions,
                 "published":                False,
                 "assessment_num_questions": 5,
                 "assessment_pass_pct":      70,
@@ -129,7 +146,7 @@ class CourseLibrary:
                 return None
             # Read all attributes inside the session to avoid DetachedInstanceError.
             entry = self._row_to_index_entry(row)
-            entry["course_script"] = json.loads(row.course_script_json)
+            entry["course_script"] = json.loads(row.course_script_json) if row.course_script_json else {}
         return entry
 
     def update(
@@ -245,11 +262,16 @@ class CourseLibrary:
             "estimated_duration_min":      row.estimated_duration_min,
             "language":                    getattr(row, "language",   "English"),
             "difficulty":                  getattr(row, "difficulty",  ""),
-            "published":                   getattr(row, "published",   False),
+            "course_format":               getattr(row, "course_format",    "standard"),
+            "duration_range":              getattr(row, "duration_range",   ""),
+            "user_instructions":           getattr(row, "user_instructions", None),
+            "published":                   getattr(row, "published",        False),
             "assessment_num_questions":    getattr(row, "assessment_num_questions", 5),
             "assessment_pass_pct":         getattr(row, "assessment_pass_pct",      70),
             "assessment_time_min":         getattr(row, "assessment_time_min",      30),
             "assessment_retakes":          getattr(row, "assessment_retakes",        3),
+            "lesson_count":                row.total_lessons,
+            "est_minutes":                 row.estimated_duration_min,
         }
 
 

@@ -46,6 +46,11 @@ _LIGATURES: dict[str, str] = {
 # rendered but appears as a literal character in raw PDF extractions.
 _ZERO_WIDTH = '​‌‍‎‏﻿­'
 
+# Bullet symbols used in safety/corporate PDFs mapped to plain "-".
+# Normalising to a single character lets the chunker and Claude treat
+# all bullet styles consistently regardless of the source PDF font.
+_BULLET_CHARS = '•‣⁃◦▪▸▶→⇒■□●○★☆✓✔✗✘'
+
 # Common boilerplate patterns found in corporate / educational PDFs.
 # Each entry is a compiled regex that matches a full line (case-insensitive).
 _BOILERPLATE_PATTERNS: list[re.Pattern] = [
@@ -102,15 +107,16 @@ def clean(content: ExtractedContent) -> ExtractedContent:
 # -- Per-block pipeline ---------------------------------------------------------
 
 def _clean_block(text: str) -> str:
-    """Apply steps 1-4 and 6-7 to a single text block."""
+    """Apply steps 1-4, 5a, 6-7 to a single text block."""
     if not text:
         return text
-    text = _normalize_unicode(text)      # step 1
-    text = _expand_ligatures(text)       # step 2
-    text = _rejoin_hyphenated_words(text)  # step 3
-    text = _normalize_whitespace(text)   # step 4
-    text = _remove_boilerplate(text)     # step 6
-    text = _remove_control_chars(text)   # step 7
+    text = _normalize_unicode(text)       # step 1
+    text = _expand_ligatures(text)        # step 2
+    text = _rejoin_hyphenated_words(text) # step 3
+    text = _normalize_whitespace(text)    # step 4
+    text = _normalize_bullets(text)       # step 5a
+    text = _remove_boilerplate(text)      # step 6
+    text = _remove_control_chars(text)    # step 7
     return text
 
 
@@ -150,12 +156,42 @@ def _rejoin_hyphenated_words(text: str) -> str:
     return text
 
 
+def _normalize_bullets(text: str) -> str:
+    """Replace all decorative bullet symbols with a plain hyphen-space.
+
+    Safety and corporate PDFs use a wide variety of bullet glyphs depending
+    on the authoring tool (Word, InDesign, Acrobat). Normalising to "- " lets
+    the chunker treat all list items consistently and prevents Claude from
+    seeing mixed bullet styles within the same narration context.
+
+    Only replaces a bullet when it appears at the start of a line (optionally
+    preceded by whitespace) so mid-sentence arrows like → are left intact.
+    """
+    return re.sub(
+        rf'^(\s*)[{re.escape(_BULLET_CHARS)}]\s*',
+        r'\1- ',
+        text,
+        flags=re.MULTILINE,
+    )
+
+
 def _normalize_whitespace(text: str) -> str:
-    """Collapse runs of whitespace; preserve paragraph breaks."""
-    # Collapse runs of spaces and tabs to a single space
-    text = re.sub(r'[ \t]+', ' ', text)
-    # Strip leading/trailing space from each individual line
-    text = '\n'.join(line.strip() for line in text.splitlines())
+    """Collapse runs of whitespace; preserve paragraph breaks and indentation.
+
+    2B — indented sub-steps (e.g. "  a. verify valve closed") are preserved
+    so numbered procedure hierarchies survive into the chunker intact.
+    Tabs are expanded to spaces first; mid-line space runs are collapsed to
+    one space; trailing whitespace is stripped but leading indent is kept.
+    """
+    # Expand tabs to spaces (2-space indent convention)
+    text = text.replace('\t', '  ')
+    # Collapse mid-line runs of spaces to one space (do NOT touch leading whitespace)
+    lines = []
+    for line in text.splitlines():
+        leading = len(line) - len(line.lstrip(' '))
+        inner   = re.sub(r' {2,}', ' ', line.lstrip(' ').rstrip())
+        lines.append(' ' * leading + inner)
+    text = '\n'.join(lines)
     # Collapse 3+ consecutive blank lines to a single paragraph break
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
@@ -179,7 +215,7 @@ def _strip_repeated_lines(pages_text: list[str]) -> list[str]:
     line_count: Counter[str] = Counter()
     for text in pages_text:
         non_empty = [l.strip() for l in text.splitlines() if l.strip()]
-        edge = set(non_empty[:2] + non_empty[-2:])
+        edge = set(non_empty[:3] + non_empty[-3:])
         for line in edge:
             if len(line) >= 4:
                 line_count[line] += 1

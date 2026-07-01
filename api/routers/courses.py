@@ -272,6 +272,7 @@ async def generate_course_from_blueprint(
     course_format:      str  = Form("custom", description="'custom' follows the blueprint exactly; 'standard' uses the auto-outline pipeline"),
     language:           str  = Form("English", description="Language for all course content"),
     duration_range:     str  = Form("60-90 minutes", description="Target duration: '30-45 minutes', '60-90 minutes', '2-3 hours', '3+ hours'"),
+    user_instructions:  str | None = Form(None, description="Additional structure/style instructions (e.g. '7 modules', 'conversational tone')"),
 ):
     """
     **Form-data alternative to POST /generate.**
@@ -298,7 +299,7 @@ async def generate_course_from_blueprint(
         course_title=course_title,
         target_audience=target_audience,
         instructions=instructions,
-        user_instructions=None,
+        user_instructions=user_instructions,
         use_knowledge_base=use_knowledge_base,
         course_format=course_format,
         language=language,
@@ -307,6 +308,33 @@ async def generate_course_from_blueprint(
         vector_store=vector_store,
         embedder=embedder,
     )
+
+
+@router.get("/jobs", tags=["Course Generation"])
+def list_course_jobs(_=Depends(require_admin)):
+    """
+    List all course generation jobs, newest first. Admin only.
+    Returns up to 10 most recent jobs with their status and progress.
+    """
+    jobs = job_store.list_course_jobs()[:10]
+    return [
+        {
+            "job_id": j.job_id,
+            "status": j.status,
+            "title": (
+                j.course_script.get("course_title", j.source_file)
+                if j.course_script else j.source_file
+            ),
+            "source_file": j.source_file,
+            "error": j.error,
+            "progress": (
+                round(j.completed_lessons / j.total_lessons, 2)
+                if j.total_lessons > 0 else (1.0 if j.status == "completed" else 0.0)
+            ),
+            "started_at": j.started_at,
+        }
+        for j in jobs
+    ]
 
 
 @router.get("/jobs/{job_id}", response_model=CourseJobStatus,
@@ -357,12 +385,14 @@ def list_library(
 
 
 @router.get("/library/{script_id}", tags=["Course Library"])
-def get_library_script(script_id: str, _=Depends(get_current_user)):
+def get_library_script(script_id: str, current_user: UserRow = Depends(get_current_user)):
     """
     Retrieve a saved course script in full, including the complete course_script JSON.
     """
     record = library.get(script_id)
     if not record:
+        raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found in library.")
+    if not record.get("published") and current_user.role != "admin":
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found in library.")
     return record
 
@@ -491,7 +521,7 @@ async def get_assessment_questions(script_id: str, regenerate: bool = False, _=D
 
 @router.post("/library/{script_id}/assessment-attempts", tags=["Course Library"],
              status_code=201)
-async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest, _=Depends(get_current_user)):
+async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest, current_user: UserRow = Depends(get_current_user)):
     """
     Record a completed assessment attempt for a learner.
     Called by the Flutter app immediately after the learner submits the quiz.
@@ -505,10 +535,26 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
     if not record:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
 
+    effective_id = req.learner_id if current_user.role == "admin" else current_user.email
+
+    retakes = int(record.get("assessment_retakes") or 3)
+    if retakes > 0:
+        from sqlalchemy import func
+        with SessionLocal() as _db:
+            existing = _db.query(func.count(AssessmentAttemptRow.id)).filter(
+                AssessmentAttemptRow.learner_id == effective_id,
+                AssessmentAttemptRow.script_id == script_id,
+            ).scalar() or 0
+        if existing >= retakes:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Retake limit of {retakes} reached.",
+            )
+
     with SessionLocal() as db:
         row = AssessmentAttemptRow(
             id=str(uuid.uuid4()),
-            learner_id=req.learner_id,
+            learner_id=effective_id,
             script_id=script_id,
             score=req.score,
             correct=req.correct,
@@ -526,7 +572,7 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
             from api.notification_store import push as _notif
             course_title = (record.get("course_title") or script_id)
             _notif(
-                req.learner_id,
+                effective_id,
                 "Certificate Earned",
                 f'You passed "{course_title}" with {req.score}%! Your certificate is ready.',
                 "🎓",
@@ -540,7 +586,7 @@ async def save_assessment_attempt(script_id: str, req: AssessmentAttemptRequest,
 
 @router.get("/library/{script_id}/assessment-attempts", tags=["Course Library"],
             response_model=dict)
-def get_assessment_attempts(script_id: str, learner_id: str, _=Depends(get_current_user)):
+def get_assessment_attempts(script_id: str, learner_id: str | None = None, current_user: UserRow = Depends(get_current_user)):
     """
     Retrieve all assessment attempts for a learner on a course, newest first.
     """
@@ -552,19 +598,23 @@ def get_assessment_attempts(script_id: str, learner_id: str, _=Depends(get_curre
     if not record:
         raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found.")
 
+    admin_all = current_user.role == "admin" and not learner_id
+    effective_id = (
+        None if admin_all
+        else (learner_id if (learner_id and current_user.role == "admin") else current_user.email)
+    )
+
     with SessionLocal() as db:
-        rows = (
-            db.query(AssessmentAttemptRow)
-            .filter(
-                AssessmentAttemptRow.script_id == script_id,
-                AssessmentAttemptRow.learner_id == learner_id,
-            )
-            .order_by(desc(AssessmentAttemptRow.taken_at))
-            .all()
+        q = db.query(AssessmentAttemptRow).filter(
+            AssessmentAttemptRow.script_id == script_id,
         )
+        if effective_id:
+            q = q.filter(AssessmentAttemptRow.learner_id == effective_id)
+        rows = q.order_by(desc(AssessmentAttemptRow.taken_at)).all()
         attempts = [
             AssessmentAttemptItem(
                 id=r.id,
+                learner_id=r.learner_id if admin_all else None,
                 score=r.score,
                 correct=r.correct,
                 total=r.total,

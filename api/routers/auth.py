@@ -16,11 +16,13 @@ from pydantic import BaseModel, EmailStr, Field
 
 from api.auth import (
     create_access_token,
+    create_password_reset_token,
     create_refresh_token,
     decode_token,
     hash_password,
     verify_password,
 )
+from api.config import settings
 from api.db import SessionLocal
 from api.dependencies import get_current_user
 from api.models.users import UserRow
@@ -63,6 +65,8 @@ class _MeResponse(BaseModel):
 
 @router.post("/register", response_model=_AuthResponse, status_code=201)
 def register(body: _RegisterRequest):
+    from api.email_service import send_welcome_email
+
     with SessionLocal() as db:
         existing = db.query(UserRow).filter(UserRow.email == body.email).first()
         if existing:
@@ -76,7 +80,7 @@ def register(body: _RegisterRequest):
         db.add(user)
         db.commit()
         db.refresh(user)
-        return _AuthResponse(
+        out = _AuthResponse(
             access_token=create_access_token(user.id, user.role),
             refresh_token=create_refresh_token(user.id),
             user_id=user.id,
@@ -84,6 +88,10 @@ def register(body: _RegisterRequest):
             role=user.role,
             display_name=user.display_name,
         )
+
+    # Fire-and-forget — email errors never block registration
+    send_welcome_email(out.email, out.display_name or "")
+    return out
 
 
 @router.post("/login", response_model=_AuthResponse)
@@ -158,5 +166,61 @@ def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect.")
     with SessionLocal() as db:
         user = db.get(UserRow, current_user.id)
+        user.password_hash = hash_password(body.new_password)
+        db.commit()
+
+
+class _ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class _ResetPasswordRequest(BaseModel):
+    token:        str
+    new_password: str = Field(min_length=8)
+
+
+@router.post("/forgot-password", status_code=204)
+def forgot_password(body: _ForgotPasswordRequest):
+    """
+    Send a password-reset link to the given email address.
+    Always returns 204 regardless of whether the address exists
+    (prevents email enumeration attacks).
+    """
+    from api.email_service import send_password_reset_email, is_configured
+
+    if not is_configured():
+        return  # silently no-op when email not wired up
+
+    with SessionLocal() as db:
+        user = db.query(UserRow).filter(UserRow.email == body.email).first()
+
+    if user is None:
+        return  # don't reveal that the address is unknown
+
+    token = create_password_reset_token(user.id)
+    reset_link = f"{settings.app_base_url}/reset-password?token={token}"
+    send_password_reset_email(to=user.email, reset_link=reset_link)
+
+
+@router.post("/reset-password", status_code=204)
+def reset_password(body: _ResetPasswordRequest):
+    """Consume a password-reset JWT and set a new password."""
+    from jose import JWTError
+
+    _400 = HTTPException(status_code=400, detail="Invalid or expired reset link.")
+    try:
+        payload = decode_token(body.token)
+        if payload.get("type") != "password_reset":
+            raise _400
+        user_id: str = payload.get("sub", "")
+        if not user_id:
+            raise _400
+    except JWTError:
+        raise _400
+
+    with SessionLocal() as db:
+        user = db.get(UserRow, user_id)
+        if user is None:
+            raise _400
         user.password_hash = hash_password(body.new_password)
         db.commit()

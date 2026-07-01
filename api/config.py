@@ -79,6 +79,22 @@ class Settings(BaseSettings):
     jwt_algorithm:               str = "HS256"
     access_token_expire_minutes: int = 30
 
+    # Upload limits
+    max_upload_mb: int = 50  # per-file cap for document uploads
+
+    # Email (SMTP) — leave smtp_host blank to disable email features
+    # Example (Gmail): SMTP_HOST=smtp.gmail.com  SMTP_PORT=587  SMTP_TLS=true
+    # Example (SES):   SMTP_HOST=email-smtp.us-east-1.amazonaws.com  SMTP_PORT=587
+    smtp_host:     str  = ""
+    smtp_port:     int  = 587
+    smtp_user:     str  = ""
+    smtp_password: str  = ""
+    smtp_from:     str  = "noreply@arresto.in"
+    smtp_tls:      bool = True    # True = STARTTLS (port 587); False = SMTP_SSL (port 465)
+
+    # Base URL used in outbound email links (no trailing slash)
+    app_base_url: str = "http://localhost:8000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

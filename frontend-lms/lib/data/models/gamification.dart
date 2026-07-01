@@ -124,6 +124,7 @@ class LeaderboardEntry {
   final int totalXp;
   final int dailyQXp;
   final int hazardXp;
+  final int lessonXp;
   final int dailyQStreak;
 
   const LeaderboardEntry({
@@ -133,6 +134,7 @@ class LeaderboardEntry {
     required this.totalXp,
     required this.dailyQXp,
     required this.hazardXp,
+    required this.lessonXp,
     required this.dailyQStreak,
   });
 
@@ -143,7 +145,27 @@ class LeaderboardEntry {
         totalXp: j['total_xp'] as int,
         dailyQXp: j['daily_q_xp'] as int,
         hazardXp: j['hazard_xp'] as int,
+        lessonXp: j['lesson_xp'] as int? ?? 0,
         dailyQStreak: j['daily_q_streak'] as int,
+      );
+}
+
+class LearnerGamificationStats {
+  final int maxStreak;
+  final int totalXp;
+  final int totalLessonsCompleted;
+
+  const LearnerGamificationStats({
+    required this.maxStreak,
+    required this.totalXp,
+    required this.totalLessonsCompleted,
+  });
+
+  factory LearnerGamificationStats.fromJson(Map<String, dynamic> j) =>
+      LearnerGamificationStats(
+        maxStreak: j['max_streak'] as int,
+        totalXp: j['total_xp'] as int,
+        totalLessonsCompleted: j['total_lessons_completed'] as int,
       );
 }
 
@@ -154,6 +176,7 @@ class GamificationProfile {
   final int totalXp;
   final int dailyQXp;
   final int hazardXp;
+  final int lessonXp;
   final int dailyQStreak;
   final int? rank;
 
@@ -164,6 +187,7 @@ class GamificationProfile {
     required this.totalXp,
     required this.dailyQXp,
     required this.hazardXp,
+    required this.lessonXp,
     required this.dailyQStreak,
     this.rank,
   });
@@ -176,6 +200,7 @@ class GamificationProfile {
         totalXp: j['total_xp'] as int,
         dailyQXp: j['daily_q_xp'] as int,
         hazardXp: j['hazard_xp'] as int,
+        lessonXp: j['lesson_xp'] as int? ?? 0,
         dailyQStreak: j['daily_q_streak'] as int,
         rank: j['rank'] as int?,
       );

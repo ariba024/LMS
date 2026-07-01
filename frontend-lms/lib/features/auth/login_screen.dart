@@ -168,8 +168,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: auth.isLoading ? null : _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: ArrestoColors.orange,
-                              foregroundColor: Colors.white,
+                              backgroundColor: ArrestoColors.amber,
+                              foregroundColor: ArrestoColors.ink,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -181,12 +181,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: ArrestoColors.ink,
                                     ),
                                   )
                                 : Text(
                                     _isRegister ? 'Create account' : 'Sign in',
-                                    style: ArrestoText.bodyBold(color: Colors.white),
+                                    style: ArrestoText.bodyBold(color: ArrestoColors.ink),
                                   ),
                           ),
                         ),
@@ -208,7 +208,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               }),
                               child: Text(
                                 _isRegister ? 'Sign in' : 'Register',
-                                style: ArrestoText.bodyMd(color: ArrestoColors.orange),
+                                style: ArrestoText.bodyMd(color: ArrestoColors.amber),
                               ),
                             ),
                           ],
@@ -227,7 +227,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _label(String text) =>
-      Text(text, style: ArrestoText.label(color: ArrestoColors.ink));
+      Text(text, style: ArrestoText.label(color: ArrestoColors.textSecondary));
 
   Widget _field({
     required TextEditingController controller,
@@ -243,7 +243,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,
-      style: ArrestoText.body(color: ArrestoColors.ink),
+      style: ArrestoText.body(color: ArrestoColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: ArrestoText.body(),
@@ -262,7 +262,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: ArrestoColors.orange, width: 1.5),
+          borderSide: const BorderSide(color: ArrestoColors.amber, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

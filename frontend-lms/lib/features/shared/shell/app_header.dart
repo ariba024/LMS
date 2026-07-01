@@ -102,7 +102,7 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                    color: ArrestoColors.ink,
+                    color: ArrestoColors.textPrimary,
                     onPressed: _toggleNotif,
                   ),
                   if (unread > 0)

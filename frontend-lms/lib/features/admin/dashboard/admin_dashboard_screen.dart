@@ -48,7 +48,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // ── Compact KPI row ──
+                // ── Compact KPI row (real data) ──
                 const _KpiGrid(),
                 const SizedBox(height: 16),
 
@@ -67,7 +67,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                               children: [
                                 _RecentCourses(courses: courses),
                                 const SizedBox(height: 16),
-                                const _GenerationPanel(),
+                                const _GenerationQueuePanel(),
                               ],
                             ),
                           ),
@@ -92,7 +92,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                         children: [
                           _RecentCourses(courses: courses),
                           const SizedBox(height: 16),
-                          const _GenerationPanel(),
+                          const _GenerationQueuePanel(),
                           const SizedBox(height: 16),
                           const _QuickStatsPanel(),
                           const SizedBox(height: 16),
@@ -112,32 +112,61 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 }
 
-// ── KPI grid ────────────────────────────────────────────────────────────────
+// ── KPI grid (real data from analytics + jobs providers) ─────────────────────
 
 class _KpiGrid extends ConsumerWidget {
   const _KpiGrid();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final courseCount = ref.watch(libraryProvider).maybeWhen(
-          data: (courses) => courses.length.toString(),
-          orElse: () => '—',
-        );
+    final libraryAsync = ref.watch(libraryProvider);
+    final analyticsAsync = ref.watch(analyticsOverviewProvider);
+    final jobsAsync = ref.watch(courseJobsProvider);
+
+    final courseCount = libraryAsync.maybeWhen(
+        data: (courses) => courses.length.toString(), orElse: () => '—');
+    final totalLearners = analyticsAsync.maybeWhen(
+        data: (o) => o.totalLearners.toString(), orElse: () => '—');
+    final activeLearners = analyticsAsync.maybeWhen(
+        data: (o) => o.activeLearners.toString(), orElse: () => '—');
+    final activeSub = analyticsAsync.maybeWhen(
+        data: (o) => o.totalLearners > 0
+            ? '${(o.activeLearners * 100 ~/ o.totalLearners)}% of total'
+            : 'of total',
+        orElse: () => 'of total');
+    final learningHours = analyticsAsync.maybeWhen(
+        data: (o) => '${o.totalLearningHours}h', orElse: () => '—');
+    final aiSessions = analyticsAsync.maybeWhen(
+        data: (o) => o.totalAiSessions.toString(), orElse: () => '—');
+    final newThisMonth = analyticsAsync.maybeWhen(
+        data: (o) => o.newThisMonth.toString(), orElse: () => '—');
+    final coursesGenerated = jobsAsync.maybeWhen(
+        data: (jobs) =>
+            jobs.where((j) => j.status == 'completed').length.toString(),
+        orElse: () => '—');
+    final generatingNow = jobsAsync.maybeWhen(
+        data: (jobs) => jobs
+            .where((j) => j.status == 'running' || j.status == 'pending')
+            .length
+            .toString(),
+        orElse: () => '0');
 
     final kpis = <_Kpi>[
-      const _Kpi('Total Learners', '1,284', Icons.people_alt_rounded,
-          ArrestoColors.blue, '+6.2%', _Trend.up, 'vs last month'),
+      _Kpi('Total Learners', totalLearners, Icons.people_alt_rounded,
+          ArrestoColors.blue, 'live', _Trend.up, 'enrolled'),
       _Kpi('Total Courses', courseCount, Icons.library_books_rounded,
-          ArrestoColors.amber, '+3', _Trend.up, 'in library'),
-      const _Kpi('Active Learners', '1,042', Icons.bolt_rounded,
-          ArrestoColors.green, '81%', _Trend.up, 'of total'),
-      const _Kpi('Courses Generated', '47', Icons.auto_awesome_rounded,
-          ArrestoColors.orange, '+12', _Trend.up, 'this month'),
-      const _Kpi('Learning Hours', '18.2k', Icons.schedule_rounded,
-          ArrestoColors.blue, '+8.4%', _Trend.up, 'all learners'),
-      const _Kpi('AI Conversations', '3,420', Icons.forum_rounded,
-          ArrestoColors.amber, '+21%', _Trend.up, 'this week'),
-      const _Kpi('Generating Now', '2', Icons.sync_rounded,
+          ArrestoColors.amber, 'live', _Trend.up, 'in library'),
+      _Kpi('Active Learners', activeLearners, Icons.bolt_rounded,
+          ArrestoColors.green, 'active', _Trend.up, activeSub),
+      _Kpi('Courses Generated', coursesGenerated, Icons.auto_awesome_rounded,
+          ArrestoColors.orange, 'total', _Trend.up, 'completed jobs'),
+      _Kpi('Learning Hours', learningHours, Icons.schedule_rounded,
+          ArrestoColors.blue, 'total', _Trend.up, 'all learners'),
+      _Kpi('AI Conversations', aiSessions, Icons.forum_rounded,
+          ArrestoColors.amber, 'total', _Trend.up, 'sessions'),
+      _Kpi('New This Month', newThisMonth, Icons.person_add_alt_rounded,
+          ArrestoColors.green, 'month', _Trend.up, 'new learners'),
+      _Kpi('Generating Now', generatingNow, Icons.sync_rounded,
           ArrestoColors.red, 'live', _Trend.neutral, 'in progress'),
     ];
 
@@ -150,8 +179,7 @@ class _KpiGrid extends ConsumerWidget {
         spacing: gap,
         runSpacing: gap,
         children: [
-          for (final k in kpis)
-            SizedBox(width: cardW, child: _KpiCard(kpi: k)),
+          for (final k in kpis) SizedBox(width: cardW, child: _KpiCard(kpi: k)),
         ],
       );
     });
@@ -203,36 +231,34 @@ class _KpiCardState extends State<_KpiCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
-        transform:
-            _hover ? (Matrix4.identity()..translate(0.0, -3.0)) : Matrix4.identity(),
+        transform: _hover
+            ? (Matrix4.identity()..translate(0.0, -3.0))
+            : Matrix4.identity(),
         decoration: BoxDecoration(
           color: ArrestoColors.surface.withValues(alpha: 0.72),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _hover
-                ? k.accent.withValues(alpha: 0.5)
-                : ArrestoColors.cardBorder,
+            color: _hover ? k.accent.withValues(alpha: 0.5) : ArrestoColors.cardBorder,
           ),
           boxShadow: [
             ...ArrestoColors.sh2,
             if (_hover)
               BoxShadow(
-                color: k.accent.withValues(alpha: 0.16),
-                blurRadius: 24,
-                spreadRadius: 1,
-              ),
+                  color: k.accent.withValues(alpha: 0.16),
+                  blurRadius: 24,
+                  spreadRadius: 1),
           ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Stack(
             children: [
-              // Thin glowing accent edge (left)
               Positioned(
                 left: 0,
                 top: 0,
                 bottom: 0,
-                child: Container(width: 3, color: k.accent.withValues(alpha: 0.9)),
+                child: Container(
+                    width: 3, color: k.accent.withValues(alpha: 0.9)),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(15, 13, 13, 13),
@@ -253,19 +279,28 @@ class _KpiCardState extends State<_KpiCard> {
                         ),
                         const Spacer(),
                         _TrendChip(
-                            label: k.trend, color: trendColor, bg: trendBg, dir: k.dir),
+                            label: k.trend,
+                            color: trendColor,
+                            bg: trendBg,
+                            dir: k.dir),
                       ],
                     ),
                     const SizedBox(height: 11),
                     Text(k.value,
-                        style: ArrestoText.stat().copyWith(fontSize: 25)),
+                        style: ArrestoText.stat().copyWith(fontSize: 25),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 3),
                     Text(k.title,
-                        style: ArrestoText.small(color: ArrestoColors.textSecondary)
+                        style: ArrestoText.small(
+                                color: ArrestoColors.textSecondary)
                             .copyWith(fontWeight: FontWeight.w600),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
-                    Text(k.sub, style: ArrestoText.xs(color: ArrestoColors.textMuted2)),
+                    Text(k.sub,
+                        style: ArrestoText.xs(color: ArrestoColors.textMuted2),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -283,16 +318,17 @@ class _TrendChip extends StatelessWidget {
   final Color bg;
   final _Trend dir;
   const _TrendChip(
-      {required this.label, required this.color, required this.bg, required this.dir});
+      {required this.label,
+      required this.color,
+      required this.bg,
+      required this.dir});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -377,8 +413,9 @@ class _ActionButtonState extends State<_ActionButton> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-        transform:
-            _hover ? (Matrix4.identity()..translate(0.0, -2.0)) : Matrix4.identity(),
+        transform: _hover
+            ? (Matrix4.identity()..translate(0.0, -2.0))
+            : Matrix4.identity(),
         decoration: BoxDecoration(
           gradient: primary
               ? const LinearGradient(
@@ -419,7 +456,9 @@ class _ActionButtonState extends State<_ActionButton> {
                   const SizedBox(width: 8),
                   Text(widget.label,
                       style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: fg)),
                 ],
               ),
             ),
@@ -530,6 +569,7 @@ class _CourseRow extends StatelessWidget {
                   CourseStyle.whiteboard => 'Whiteboard',
                   CourseStyle.claude => 'AI Style',
                   CourseStyle.hybrid => 'Hybrid',
+                  CourseStyle.none => 'No Video',
                 },
                 style: ArrestoText.small(),
               ),
@@ -551,50 +591,126 @@ class _CourseRow extends StatelessWidget {
   }
 }
 
-// ── Left: Current Course Generation ─────────────────────────────────────────
+// ── Left: Generation Queue (REAL data from /api/v1/courses/jobs) ─────────────
 
-class _GenerationPanel extends StatelessWidget {
-  const _GenerationPanel();
+class _GenerationQueuePanel extends ConsumerWidget {
+  const _GenerationQueuePanel();
 
   @override
-  Widget build(BuildContext context) {
-    const items = [
-      ('Rope Access Safety', 0.7),
-      ('PPE Selection Guide', 0.3),
-    ];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final jobsAsync = ref.watch(courseJobsProvider);
     return ArrestoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(
-            icon: Icons.sync_rounded,
-            title: 'Current Course Generation',
-          ),
+              icon: Icons.sync_rounded, title: 'Current Course Generation'),
           const SizedBox(height: 14),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
+          jobsAsync.when(
+            loading: () => const Center(
+                child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2))),
+            error: (_, __) => Text('Could not load jobs',
+                style: ArrestoText.xs(color: ArrestoColors.textMuted)),
+            data: (jobs) {
+              final active = jobs
+                  .where(
+                      (j) => j.status == 'running' || j.status == 'pending')
+                  .toList();
+              final failed =
+                  jobs.where((j) => j.status == 'failed').toList();
+              if (active.isEmpty && failed.isEmpty) {
+                return Text('No active jobs',
+                    style: ArrestoText.bodySm(color: ArrestoColors.textMuted));
+              }
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Text(item.$1,
-                              style: ArrestoText.bodySm(color: ArrestoColors.ink))),
-                      Text('${(item.$2 * 100).round()}%',
-                          style: ArrestoText.smallBold(color: ArrestoColors.amber)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  AnimatedArrestoProgressBar(
-                    value: item.$2.toDouble(),
-                    tone: ProgressTone.orange,
-                    height: 6,
-                  ),
+                  ...active.map((job) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                    child: Text(job.title,
+                                        style: ArrestoText.bodySm(
+                                            color: ArrestoColors.ink),
+                                        overflow: TextOverflow.ellipsis)),
+                                Text('${(job.progress * 100).round()}%',
+                                    style: ArrestoText.smallBold(
+                                        color: ArrestoColors.amber)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            AnimatedArrestoProgressBar(
+                              value: job.progress,
+                              tone: ProgressTone.orange,
+                              height: 6,
+                            ),
+                          ],
+                        ),
+                      )),
+                  if (failed.isNotEmpty) ...[
+                    if (active.isNotEmpty) const SizedBox(height: 4),
+                    ...failed.map((job) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: ArrestoColors.redSoft,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: ArrestoColors.red
+                                      .withValues(alpha: 0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.error_outline_rounded,
+                                        size: 14, color: ArrestoColors.red),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(job.title,
+                                          style: ArrestoText.bodySm(
+                                              color: ArrestoColors.red),
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                                if (job.error != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(job.error!,
+                                      style: ArrestoText.xs(
+                                          color: ArrestoColors.red),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                                const SizedBox(height: 6),
+                                GestureDetector(
+                                  onTap: () => context.go('/admin/generator'),
+                                  child: Text('Retry in Generator →',
+                                      style: ArrestoText.xs(
+                                              color: ArrestoColors.red)
+                                          .copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              decoration:
+                                                  TextDecoration.underline)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )),
+                  ],
                 ],
-              ),
-            ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -632,7 +748,8 @@ class _QuickStatsPanel extends StatelessWidget {
                 const SizedBox(width: 9),
                 Expanded(
                     child: Text(stats[i].$1,
-                        style: ArrestoText.small(color: ArrestoColors.textSecondary))),
+                        style: ArrestoText.small(
+                            color: ArrestoColors.textSecondary))),
                 Text(stats[i].$2, style: ArrestoText.bodyBold()),
               ],
             ),
@@ -648,13 +765,15 @@ class _QuickStatsPanel extends StatelessWidget {
   }
 }
 
-// ── Right: AI Usage ─────────────────────────────────────────────────────────
+// ── Right: AI Usage (real conversation count) ────────────────────────────────
 
-class _AiUsagePanel extends StatelessWidget {
+class _AiUsagePanel extends ConsumerWidget {
   const _AiUsagePanel();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final aiSessions = ref.watch(analyticsOverviewProvider).maybeWhen(
+        data: (o) => o.totalAiSessions.toString(), orElse: () => '—');
     return ArrestoCard(
       glow: true,
       child: Column(
@@ -675,14 +794,15 @@ class _AiUsagePanel extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(child: Text('AI Usage', style: ArrestoText.h4())),
-              Text('this month', style: ArrestoText.xs()),
+              Text('total', style: ArrestoText.xs()),
             ],
           ),
           const SizedBox(height: 14),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('3,420', style: ArrestoText.stat().copyWith(fontSize: 26)),
+              Text(aiSessions,
+                  style: ArrestoText.stat().copyWith(fontSize: 26)),
               const SizedBox(width: 6),
               Padding(
                 padding: const EdgeInsets.only(bottom: 5),
@@ -695,16 +815,12 @@ class _AiUsagePanel extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('Monthly quota', style: ArrestoText.xs())),
-              Text('68% used',
-                  style: ArrestoText.xs(color: ArrestoColors.amber)),
+              Text('68% used', style: ArrestoText.xs(color: ArrestoColors.amber)),
             ],
           ),
           const SizedBox(height: 6),
           AnimatedArrestoProgressBar(
-            value: 0.68,
-            tone: ProgressTone.orange,
-            height: 6,
-          ),
+              value: 0.68, tone: ProgressTone.orange, height: 6),
         ],
       ),
     );

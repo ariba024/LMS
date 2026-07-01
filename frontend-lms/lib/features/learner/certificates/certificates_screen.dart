@@ -2,6 +2,7 @@ import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
@@ -194,7 +195,7 @@ class _CertificateCardState extends State<_CertificateCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('ARRESTO LMS',
-                        style: ArrestoText.eyebrow(color: ArrestoColors.ink)
+                        style: ArrestoText.eyebrow(color: ArrestoColors.textPrimary)
                             .copyWith(letterSpacing: 1.5)),
                     Text('Accredited Training Provider',
                         style: ArrestoText.xs()),
@@ -255,13 +256,15 @@ class _CertificateCardState extends State<_CertificateCard> {
                   label: 'Share',
                   variant: ArrestoButtonVariant.ghost,
                   icon: const Icon(Icons.share_rounded),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Certificate ID: $certId'),
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: certId));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Certificate ID copied to clipboard'),
+                        ),
+                      );
+                    }
                   },
                 ),
               ],
@@ -278,7 +281,7 @@ class _CertificateCardState extends State<_CertificateCard> {
       children: [
         Text(label, style: ArrestoText.xs()),
         Text(value,
-            style: ArrestoText.small(color: ArrestoColors.ink)
+            style: ArrestoText.small(color: ArrestoColors.textPrimary)
                 .copyWith(fontWeight: FontWeight.w600)),
       ],
     );

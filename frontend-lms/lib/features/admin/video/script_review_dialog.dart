@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import '../../../core/services/course_service.dart';
 import '../../../core/services/video_service.dart';
@@ -98,6 +100,18 @@ class _ScriptReviewDialogState extends State<ScriptReviewDialog> {
       }
     }
     return ('', [], '');
+  }
+
+  void _downloadJson() {
+    final encoded = const JsonEncoder.withIndent('  ')
+        .convert(widget.fullCourseScript);
+    final bytes = utf8.encode(encoded);
+    final blob = html.Blob([bytes], 'application/json');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.AnchorElement(href: url)
+      ..setAttribute('download', '${widget.scriptId}_script.json')
+      ..click();
+    html.Url.revokeObjectUrl(url);
   }
 
   bool get _hasChanges {
@@ -364,6 +378,14 @@ class _ScriptReviewDialogState extends State<ScriptReviewDialog> {
               textStyle: const TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w600),
             ),
+          ),
+          IconButton(
+            onPressed: _downloadJson,
+            icon: const Icon(Icons.download_rounded, size: 20),
+            color: const Color(0xFF9B9B9B),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Download script JSON',
           ),
           IconButton(
             onPressed: () => Navigator.pop(context),

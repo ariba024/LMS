@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
 
-enum CourseStyle { animated, whiteboard, claude, hybrid }
+enum CourseStyle { animated, whiteboard, claude, hybrid, none }
 
 class CourseThumb extends StatelessWidget {
   final CourseStyle style;
@@ -37,6 +37,11 @@ class CourseThumb extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
+        CourseStyle.none => const LinearGradient(
+            colors: [Color(0xFFF5F5F5), Color(0xFFEEEEEE)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
       };
 
   IconData get _icon => switch (style) {
@@ -44,6 +49,7 @@ class CourseThumb extends StatelessWidget {
         CourseStyle.whiteboard => Icons.edit_rounded,
         CourseStyle.claude => Icons.auto_awesome_rounded,
         CourseStyle.hybrid => Icons.layers_rounded,
+        CourseStyle.none   => Icons.schedule_rounded,
       };
 
   String get _styleName => switch (style) {
@@ -51,6 +57,7 @@ class CourseThumb extends StatelessWidget {
         CourseStyle.whiteboard => 'Whiteboard',
         CourseStyle.claude => 'AI Style',
         CourseStyle.hybrid => 'Hybrid',
+        CourseStyle.none   => 'No Video',
       };
 
   @override

@@ -25,6 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+
 from api.config import settings
 from api.db import get_db
 from api.dependencies import get_current_user, require_admin
@@ -101,6 +103,46 @@ def _get_or_create_xp(learner_id: str, course_id: str, db: Session) -> LearnerXP
     return row
 
 
+# ── Aggregate stats ───────────────────────────────────────────────────────────
+
+class LearnerGamificationStats(BaseModel):
+    max_streak: int
+    total_xp: int
+    total_lessons_completed: int
+
+
+@router.get("/me/stats", response_model=LearnerGamificationStats)
+def get_my_gamification_stats(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Aggregate gamification stats for the authenticated user across all courses."""
+    from api.models.progress import LessonRecordRow
+
+    xp_rows = db.query(LearnerXPRow).filter(
+        LearnerXPRow.learner_id == current_user.email
+    ).all()
+
+    max_streak = max((r.daily_q_streak for r in xp_rows), default=0)
+    total_xp = sum(r.total_xp for r in xp_rows)
+
+    lessons_completed = (
+        db.query(func.count(LessonRecordRow.learner_id))
+        .filter(
+            LessonRecordRow.learner_id == current_user.email,
+            LessonRecordRow.completed_at.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    return LearnerGamificationStats(
+        max_streak=max_streak,
+        total_xp=total_xp,
+        total_lessons_completed=lessons_completed,
+    )
+
+
 # ── Daily Question ─────────────────────────────────────────────────────────────
 
 class DailyQuestionOut(BaseModel):
@@ -118,11 +160,11 @@ class DailyQuestionOut(BaseModel):
 @router.get("/daily-question/{course_id}", response_model=DailyQuestionOut)
 async def get_daily_question(
     course_id: str,
-    learner_id: str = "anonymous",
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Get (or generate) today's question for a course."""
+    learner_id = current_user.email
     today = _today()
     q_id = f"{course_id}:{today}"
 
@@ -208,12 +250,13 @@ def submit_daily_question(
     course_id: str,
     body: SubmitDailyQRequest,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Submit an answer to today's daily question."""
+    effective_id = body.learner_id if current_user.role == "admin" else current_user.email
     today = _today()
     q_id = f"{course_id}:{today}"
-    attempt_id = f"{body.learner_id}:{q_id}"
+    attempt_id = f"{effective_id}:{q_id}"
 
     row = db.query(DailyQuestionRow).filter(DailyQuestionRow.id == q_id).first()
     if not row:
@@ -230,7 +273,7 @@ def submit_daily_question(
 
     attempt = DailyQuestionAttemptRow(
         id=attempt_id,
-        learner_id=body.learner_id,
+        learner_id=effective_id,
         question_id=q_id,
         course_id=course_id,
         selected_index=body.selected_index,
@@ -240,18 +283,10 @@ def submit_daily_question(
     )
     db.add(attempt)
 
-    xp_row = _get_or_create_xp(body.learner_id, course_id, db)
+    xp_row = _get_or_create_xp(effective_id, course_id, db)
 
     # Update streak
     prev_date = xp_row.last_daily_q_date
-    yesterday = (
-        datetime.fromtimestamp(_now(), tz=timezone.utc)
-        .date()
-        .replace(day=datetime.fromtimestamp(_now(), tz=timezone.utc).date().day - 1)
-        .isoformat()
-        if _now() > 86400
-        else None
-    )
     if prev_date == today:
         pass  # Already counted today (shouldn't reach here due to 409 above)
     elif prev_date and (
@@ -419,9 +454,10 @@ class HazardAttemptResponse(BaseModel):
 def submit_hazard_attempt(
     body: HazardAttemptRequest,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Submit a completed Spot-the-Hazard game result and award XP."""
+    effective_id = body.learner_id if current_user.role == "admin" else current_user.email
     # XP formula: 60 base * (found/total) + 10 per quiz correct + speed bonus
     spot_xp = int(60 * body.hazards_found / max(body.total_hazards, 1))
     quiz_xp = body.quiz_correct * 10
@@ -430,7 +466,7 @@ def submit_hazard_attempt(
 
     attempt = HazardAttemptRow(
         id=str(uuid.uuid4()),
-        learner_id=body.learner_id,
+        learner_id=effective_id,
         session_id=body.session_id,
         course_id=body.course_id,
         hazards_found=body.hazards_found,
@@ -443,13 +479,24 @@ def submit_hazard_attempt(
     )
     db.add(attempt)
 
-    xp_row = _get_or_create_xp(body.learner_id, body.course_id, db)
+    xp_row = _get_or_create_xp(effective_id, body.course_id, db)
     xp_row.hazard_xp += xp
     xp_row.total_xp += xp
     xp_row.updated_at = _now()
     db.commit()
 
     return HazardAttemptResponse(xp_earned=xp, total_xp=xp_row.total_xp)
+
+
+# ── XP award helper (imported by progress.py) ─────────────────────────────────
+
+def award_lesson_xp(learner_id: str, course_id: str, xp: int, db: Session) -> None:
+    """Award XP earned from completing a lesson. Safe to call from any router."""
+    row = _get_or_create_xp(learner_id, course_id, db)
+    row.lesson_xp = (row.lesson_xp or 0) + xp
+    row.total_xp += xp
+    row.updated_at = _now()
+    db.commit()
 
 
 # ── Leaderboard ────────────────────────────────────────────────────────────────
@@ -461,7 +508,45 @@ class LeaderboardEntry(BaseModel):
     total_xp: int
     daily_q_xp: int
     hazard_xp: int
+    lesson_xp: int
     daily_q_streak: int
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardEntry])
+def get_global_leaderboard(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return top learners ranked by total XP summed across all courses."""
+    rows = (
+        db.query(
+            LearnerXPRow.learner_id,
+            LearnerXPRow.display_name,
+            func.sum(LearnerXPRow.total_xp).label("total_xp"),
+            func.sum(LearnerXPRow.daily_q_xp).label("daily_q_xp"),
+            func.sum(LearnerXPRow.hazard_xp).label("hazard_xp"),
+            func.sum(LearnerXPRow.lesson_xp).label("lesson_xp"),
+            func.max(LearnerXPRow.daily_q_streak).label("daily_q_streak"),
+        )
+        .group_by(LearnerXPRow.learner_id, LearnerXPRow.display_name)
+        .order_by(func.sum(LearnerXPRow.total_xp).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        LeaderboardEntry(
+            rank=i + 1,
+            learner_id=r.learner_id,
+            display_name=r.display_name,
+            total_xp=r.total_xp or 0,
+            daily_q_xp=r.daily_q_xp or 0,
+            hazard_xp=r.hazard_xp or 0,
+            lesson_xp=r.lesson_xp or 0,
+            daily_q_streak=r.daily_q_streak or 0,
+        )
+        for i, r in enumerate(rows)
+    ]
 
 
 @router.get("/leaderboard/{course_id}", response_model=list[LeaderboardEntry])
@@ -487,6 +572,7 @@ def get_leaderboard(
             total_xp=r.total_xp,
             daily_q_xp=r.daily_q_xp,
             hazard_xp=r.hazard_xp,
+            lesson_xp=r.lesson_xp or 0,
             daily_q_streak=r.daily_q_streak,
         )
         for i, r in enumerate(rows)
@@ -502,6 +588,7 @@ class GamificationProfile(BaseModel):
     total_xp: int
     daily_q_xp: int
     hazard_xp: int
+    lesson_xp: int
     daily_q_streak: int
     rank: int | None
 
@@ -511,9 +598,12 @@ def get_gamification_profile(
     learner_id: str,
     course_id: str,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Return a learner's gamification stats for a course."""
+    if learner_id != current_user.email and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied.")
+
     xp_id = f"{learner_id}:{course_id}"
     row = db.query(LearnerXPRow).filter(LearnerXPRow.id == xp_id).first()
 
@@ -525,11 +615,12 @@ def get_gamification_profile(
             total_xp=0,
             daily_q_xp=0,
             hazard_xp=0,
+            lesson_xp=0,
             daily_q_streak=0,
             rank=None,
         )
 
-    # Compute rank
+    # Compute rank within this course
     higher_count = (
         db.query(LearnerXPRow)
         .filter(
@@ -547,6 +638,7 @@ def get_gamification_profile(
         total_xp=row.total_xp,
         daily_q_xp=row.daily_q_xp,
         hazard_xp=row.hazard_xp,
+        lesson_xp=row.lesson_xp or 0,
         daily_q_streak=row.daily_q_streak,
         rank=rank,
     )

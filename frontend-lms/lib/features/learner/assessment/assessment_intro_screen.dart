@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/button.dart';
@@ -37,7 +38,7 @@ class AssessmentIntroScreen extends ConsumerWidget {
       children: [
         AppBar(
           backgroundColor: ArrestoColors.surface,
-          foregroundColor: ArrestoColors.ink,
+          foregroundColor: ArrestoColors.textPrimary,
           title: const Text('Assessment'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
@@ -126,13 +127,52 @@ class AssessmentIntroScreen extends ConsumerWidget {
                       context.go('/learner/assessment/$courseId/flashcards'),
                 ),
                 const SizedBox(height: 10),
-                ArrestoButton(
-                  label: 'Start Assessment',
-                  fullWidth: true,
-                  size: ArrestoButtonSize.lg,
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  onPressed: () =>
-                      context.go('/learner/assessment/$courseId/quiz'),
+                FutureBuilder<bool>(
+                  future: SharedPreferences.getInstance().then(
+                    (p) => p.containsKey('quiz_draft_$courseId'),
+                  ),
+                  builder: (ctx, snap) {
+                    final hasDraft = snap.data ?? false;
+                    if (!hasDraft) {
+                      return ArrestoButton(
+                        label: 'Start Assessment',
+                        fullWidth: true,
+                        size: ArrestoButtonSize.lg,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        onPressed: () =>
+                            context.go('/learner/assessment/$courseId/quiz'),
+                      );
+                    }
+                    return Column(
+                      children: [
+                        ArrestoButton(
+                          label: 'Resume Quiz',
+                          fullWidth: true,
+                          size: ArrestoButtonSize.lg,
+                          icon: const Icon(Icons.play_circle_outline_rounded),
+                          onPressed: () =>
+                              context.go('/learner/assessment/$courseId/quiz'),
+                        ),
+                        const SizedBox(height: 8),
+                        ArrestoButton(
+                          label: 'Start Fresh',
+                          fullWidth: true,
+                          size: ArrestoButtonSize.lg,
+                          variant: ArrestoButtonVariant.ghost,
+                          icon: const Icon(Icons.restart_alt_rounded),
+                          onPressed: () async {
+                            final prefs =
+                                await SharedPreferences.getInstance();
+                            await prefs.remove('quiz_draft_$courseId');
+                            if (context.mounted) {
+                              context.go(
+                                  '/learner/assessment/$courseId/quiz');
+                            }
+                          },
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

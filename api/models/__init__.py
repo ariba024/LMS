@@ -21,6 +21,7 @@ from api.models.gamification import (
     LearnerXPRow,
 )
 from api.models.tickets import TicketRow, TicketReplyRow
+from api.models.attention import AttentionEventRow
 
 __all__ = [
     "UserRow",
@@ -42,4 +43,5 @@ __all__ = [
     "LearnerXPRow",
     "TicketRow",
     "TicketReplyRow",
+    "AttentionEventRow",
 ]

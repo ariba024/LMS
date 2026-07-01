@@ -158,7 +158,7 @@ class _AdminSidebar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Admin User',
-                          style: ArrestoText.small(color: ArrestoColors.ink)
+                          style: ArrestoText.small(color: ArrestoColors.textPrimary)
                               .copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                       Text('Administrator',

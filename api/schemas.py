@@ -367,6 +367,7 @@ class AssessmentAttemptRequest(BaseModel):
 
 class AssessmentAttemptItem(BaseModel):
     id:              str
+    learner_id:      str | None = None
     score:           int
     correct:         int
     total:           int

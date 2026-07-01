@@ -163,7 +163,20 @@ def _item_to_content(
 
 # ── Core render call ─────────────────────────────────────────────────────────
 
-_HEYGEN_STYLES = {"animated_scene", "whiteboard_doodle", "hybrid"}
+_HEYGEN_AVATAR_STYLES    = {"hybrid"}            # talking-head avatar presenter
+_HEYGEN_ANIMATED_STYLES  = {"animated_scene"}    # voice-over + background, no avatar
+_WHITEBOARD_STYLES       = {"whiteboard_doodle"} # free Playwright whiteboard animation
+# anything else → generate_animated_video (free CSS slide deck)
+
+
+def _voice_pref(voice: str | None) -> str:
+    """Map a Sarvam speaker name to 'male' | 'female' for HeyGen avatar/voice selection."""
+    v = (voice or "").lower()
+    return (
+        "female" if v in ("female", "ritu", "kavitha", "priya", "kavya",
+                          "ishita", "pooja", "simran", "neha", "f")
+        else "male"
+    )
 
 
 def _do_render(
@@ -178,20 +191,10 @@ def _do_render(
     video_job_store.save()
 
     try:
-        if job.style in _HEYGEN_STYLES:
-            # ── HeyGen premium render ─────────────────────────────────────────
+        if job.style in _HEYGEN_AVATAR_STYLES:
+            # ── HeyGen talking-head avatar presenter ──────────────────────────
             from modules.video.generators.heygen_render import generate_heygen_video
-            out_path = (
-                Path("media") / "heygen" / job.render_id / f"{job.lang}.mp4"
-            )
-            # Map Sarvam speaker names to male/female preference for HeyGen prompt
-            _v = (job.voice or "").lower()
-            voice_pref = (
-                "male" if _v in ("male", "rahul", "gokul", "m") else
-                "female" if _v in ("female", "ritu", "kavitha", "priya", "kavya",
-                                   "ishita", "pooja", "simran", "neha", "f") else
-                "male"  # default to male narrator for safety training
-            )
+            out_path = Path("media") / "heygen" / job.render_id / f"{job.lang}.mp4"
             mp4_path: Path = generate_heygen_video(
                 lesson_id=job.render_id,
                 lesson_title=lesson_title,
@@ -199,13 +202,42 @@ def _do_render(
                 style=job.style,
                 lang=job.lang,
                 out_path=out_path,
-                voice_preference=voice_pref,
+                voice_preference=_voice_pref(job.voice),
             )
+
+        elif job.style in _HEYGEN_ANIMATED_STYLES:
+            # ── HeyGen voice-over + background (no avatar) ────────────────────
+            from modules.video.generators.heygen_render import generate_heygen_animated_video
+            out_path = Path("media") / "heygen" / job.render_id / f"{job.lang}.mp4"
+            mp4_path = generate_heygen_animated_video(
+                lesson_id=job.render_id,
+                lesson_title=lesson_title,
+                lc=lc,
+                style=job.style,
+                lang=job.lang,
+                out_path=out_path,
+                voice_preference=_voice_pref(job.voice),
+            )
+
+        elif job.style in _WHITEBOARD_STYLES:
+            # ── Free Playwright whiteboard animation ──────────────────────────
+            from modules.video.generators.animated_render import generate_whiteboard_video
+            from modules.video.generators.tts_router import active_engine
+            job.tts_engine = active_engine(job.lang)
+            video_job_store.save()
+            mp4_path = generate_whiteboard_video(
+                lesson_id=job.render_id,
+                lesson_title=lesson_title,
+                lesson_content=lc,
+                narration_script=narration,
+                lang=job.lang,
+                voice=job.voice or None,
+            )
+
         else:
-            # ── Free animated render (default) ────────────────────────────────
+            # ── Free CSS animated slide deck (default) ────────────────────────
             from modules.video.generators.animated_render import generate_animated_video
             from modules.video.generators.tts_router import active_engine
-
             job.tts_engine = active_engine(job.lang)
             video_job_store.save()
             mp4_path = generate_animated_video(

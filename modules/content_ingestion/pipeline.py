@@ -66,7 +66,6 @@ class IngestionPipeline:
     def run(self, asset: Asset) -> ExtractedContent:
         # -- 1-2  Extract ------------------------------------------------------
         content = self._route(asset).extract(asset)
-
         # -- 3  Caption --------------------------------------------------------
         if self._captioner is not None:
             content = self._captioner.caption_content(content)
@@ -85,6 +84,9 @@ class IngestionPipeline:
 
             # -- 7  Store ------------------------------------------------------
             if self._vector_store is not None and self._embedder is not None:
+                # A1: delete stale chunks before upserting so re-ingesting a file
+                # never leaves orphan vectors from the previous version in the DB.
+                self._vector_store.delete_by_source(asset.original_filename)
                 self._vector_store.upsert(chunks)
 
             content.chunks = chunks

@@ -99,5 +99,9 @@ class Chunk:
     page_number: Optional[int] = None
     slide_number: Optional[int] = None
     section_heading: Optional[str] = None
-    is_ocr: bool = False     # True when chunk text was produced by OCR
+    is_ocr:       bool = False    # True when chunk text was produced by OCR
+    is_table:     bool = False    # True when chunk was detected as a table block
+    is_procedure: bool = False    # True when chunk contains a numbered step list
+    doc_title:    str  = ""       # document-level title (forwarded from PDF/DOCX metadata)
+    doc_author:   str  = ""       # document-level author
     embedding: Optional[list[float]] = None

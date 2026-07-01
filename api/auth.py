@@ -12,7 +12,8 @@ from jose import jwt
 
 from api.config import settings
 
-_7_DAYS = 7 * 24 * 3600
+_7_DAYS  = 7 * 24 * 3600
+_15_MINS = 15 * 60
 
 
 def hash_password(plain: str) -> str:
@@ -36,6 +37,15 @@ def create_refresh_token(sub: str) -> str:
     expire = int(time.time()) + _7_DAYS
     return jwt.encode(
         {"sub": sub, "exp": expire, "type": "refresh"},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def create_password_reset_token(sub: str) -> str:
+    expire = int(time.time()) + _15_MINS
+    return jwt.encode(
+        {"sub": sub, "exp": expire, "type": "password_reset"},
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )

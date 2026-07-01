@@ -22,7 +22,7 @@ class CourseDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(courseDetailProvider(id));
     final lessonsAsync = ref.watch(courseLessonsProvider(id));
-    final mockCourses = ref.watch(coursesProvider);
+    final liveCourses = ref.watch(libraryProvider).valueOrNull ?? const <Course>[];
     final mockLessons = ref.watch(lessonsProvider);
 
     return detailAsync.when(
@@ -61,11 +61,11 @@ class CourseDetailScreen extends ConsumerWidget {
         ],
       ),
       data: (detail) {
-        // 404 → detail is empty; fall back to mock course data.
+        // 404 → detail is empty; look up from the library list.
         final Course course;
         final List<CourseLesson> courseLessons;
         if (detail.isEmpty) {
-          final mock = mockCourses.where((c) => c.id == id).firstOrNull;
+          final mock = liveCourses.where((c) => c.id == id).firstOrNull;
           if (mock == null) {
             return Column(children: [
               _appBar(context, ref, ''),
@@ -98,7 +98,7 @@ class CourseDetailScreen extends ConsumerWidget {
             slivers: [
               SliverAppBar(
                 backgroundColor: ArrestoColors.surface,
-                foregroundColor: ArrestoColors.ink,
+                foregroundColor: ArrestoColors.textPrimary,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: () => context.pop(),
@@ -215,7 +215,7 @@ class CourseDetailScreen extends ConsumerWidget {
   AppBar _appBar(BuildContext context, WidgetRef ref, String title) =>
       AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),

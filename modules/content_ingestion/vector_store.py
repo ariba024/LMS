@@ -14,11 +14,19 @@ Collection name: lms_chunks_bge_m3 (1024-dim; previously lms_chunks at 384-dim).
 
 from __future__ import annotations
 import logging
+import re
 
 logger = logging.getLogger("arresto.vector_store")
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+
+def _heading_slug(heading: str | None) -> str:
+    """5D — stable lowercase slug for section_id filtering."""
+    if not heading:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "_", heading.lower())[:60].strip("_")
 
 if TYPE_CHECKING:
     from modules.content_ingestion.models import Chunk
@@ -83,8 +91,14 @@ class VectorStore:
                 "page_number":     c.page_number  if c.page_number  is not None else -1,
                 "slide_number":    c.slide_number if c.slide_number is not None else -1,
                 "section_heading": c.section_heading or "",
+                # 5D: slug of the heading for exact filter queries
+                "section_id":      _heading_slug(c.section_heading),
                 "token_count":     c.token_count,
                 "is_ocr":          c.is_ocr,
+                "is_table":        c.is_table,
+                "is_procedure":    c.is_procedure,   # 3F
+                "doc_title":       c.doc_title,       # 1E
+                "doc_author":      c.doc_author,      # 1E
             }
             for c in chunks
         ]
@@ -108,6 +122,7 @@ class VectorStore:
         n_results: int = 5,
         source_file: str | None = None,
         asset_type: str | None = None,
+        min_score: float = 0.0,
     ) -> list[dict]:
         """
         Return the top-n_results most similar chunks.
@@ -115,6 +130,8 @@ class VectorStore:
         Optional filters:
           source_file  - restrict to one document
           asset_type   - restrict to "pdf", "docx", or "pptx"
+          min_score    - discard chunks with cosine similarity below this value
+                         (0.0 = no filter; 0.55 = reasonable quality floor)
         """
         where: dict | None = None
         if source_file and asset_type:
@@ -136,7 +153,7 @@ class VectorStore:
             include=["documents", "metadatas", "distances"],
         ))
 
-        return [
+        hits = [
             {
                 "chunk_id":  results["ids"][0][i],
                 "text":      results["documents"][0][i],
@@ -145,6 +162,104 @@ class VectorStore:
             }
             for i in range(len(results["ids"][0]))
         ]
+
+        if min_score > 0.0:
+            hits = [h for h in hits if h["score"] >= min_score]
+
+        return hits
+
+    def mmr_query(
+        self,
+        query_embedding: list[float],
+        n_results: int = 5,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.6,
+        source_file: str | None = None,
+        asset_type: str | None = None,
+        min_score: float = 0.0,
+    ) -> list[dict]:
+        """
+        Maximal Marginal Relevance retrieval — returns diverse, relevant chunks.
+
+        Fetches `fetch_k` candidates then greedily selects `n_results` that
+        maximise:  λ·sim(query, doc) − (1−λ)·max(sim(doc, selected_doc))
+        lambda_mult=1.0 → pure similarity; lambda_mult=0.0 → pure diversity.
+        Falls back to plain query() when numpy is unavailable.
+        """
+        try:
+            import numpy as np
+        except ImportError:
+            return self.query(query_embedding, n_results, source_file, asset_type, min_score)
+
+        where: dict | None = None
+        if source_file and asset_type:
+            where = {"$and": [{"source_file": source_file}, {"asset_type": asset_type}]}
+        elif source_file:
+            where = {"source_file": source_file}
+        elif asset_type:
+            where = {"asset_type": asset_type}
+
+        n = min(max(n_results, fetch_k), self.count())
+        if n == 0:
+            return []
+
+        results = self._col_op(lambda col: col.query(
+            query_embeddings=[query_embedding],
+            n_results=n,
+            where=where,
+            include=["documents", "metadatas", "distances", "embeddings"],
+        ))
+
+        hits = [
+            {
+                "chunk_id":  results["ids"][0][i],
+                "text":      results["documents"][0][i],
+                "metadata":  results["metadatas"][0][i],
+                "score":     round(1 - results["distances"][0][i], 4),
+                "_vec":      np.array(results["embeddings"][0][i], dtype=np.float32),
+            }
+            for i in range(len(results["ids"][0]))
+        ]
+
+        if min_score > 0.0:
+            hits = [h for h in hits if h["score"] >= min_score]
+
+        if len(hits) <= n_results:
+            for h in hits:
+                del h["_vec"]
+            return hits
+
+        # Greedy MMR selection
+        selected: list[int] = []
+        remaining = list(range(len(hits)))
+
+        # Seed: highest-relevance chunk
+        best = max(remaining, key=lambda i: hits[i]["score"])
+        selected.append(best)
+        remaining.remove(best)
+
+        while len(selected) < n_results and remaining:
+            best_idx, best_mmr = None, float("-inf")
+            for i in remaining:
+                relevance   = hits[i]["score"]
+                v_i         = hits[i]["_vec"]
+                norm_i      = float(np.linalg.norm(v_i)) + 1e-8
+                redundancy  = max(
+                    float(np.dot(v_i, hits[j]["_vec"]) /
+                          (norm_i * (float(np.linalg.norm(hits[j]["_vec"])) + 1e-8)))
+                    for j in selected
+                )
+                mmr = lambda_mult * relevance - (1 - lambda_mult) * redundancy
+                if mmr > best_mmr:
+                    best_mmr, best_idx = mmr, i
+            selected.append(best_idx)
+            remaining.remove(best_idx)
+
+        result = []
+        for i in selected:
+            h = {k: v for k, v in hits[i].items() if k != "_vec"}
+            result.append(h)
+        return result
 
     def get_all_by_source(self, source_file: str) -> list[dict]:
         """Return every chunk stored for a given source file, ordered by chunk_index."""

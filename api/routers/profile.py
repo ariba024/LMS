@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.db import SessionLocal
 from api.dependencies import get_current_user
 from api.models.profile import LearnerProfileRow
 from api.models.progress import AssessmentAttemptRow, LessonRecordRow
+from api.models.users import UserRow
 
 router = APIRouter(prefix="/api/v1/profile", tags=["Learner Profile"])
 
@@ -83,14 +84,18 @@ def _load_profile(learner_id: str) -> ProfileResponse:
 
 
 @router.get("/{learner_id}", response_model=ProfileResponse)
-def get_profile(learner_id: str, _=Depends(get_current_user)):
+def get_profile(learner_id: str, current_user: UserRow = Depends(get_current_user)):
     """Get learner profile + summary stats (enrolled courses, completed lessons, certificates)."""
+    if current_user.role != "admin" and learner_id != current_user.email:
+        raise HTTPException(status_code=403, detail="Forbidden")
     return _load_profile(learner_id)
 
 
 @router.patch("/{learner_id}", response_model=ProfileResponse)
-def patch_profile(learner_id: str, body: PatchProfileRequest, _=Depends(get_current_user)):
+def patch_profile(learner_id: str, body: PatchProfileRequest, current_user: UserRow = Depends(get_current_user)):
     """Update the learner's display name."""
+    if current_user.role != "admin" and learner_id != current_user.email:
+        raise HTTPException(status_code=403, detail="Forbidden")
     with SessionLocal() as db:
         prof = db.get(LearnerProfileRow, learner_id)
         if prof is None:

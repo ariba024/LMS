@@ -87,11 +87,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ArrestoCard(
             child: Column(
               children: [
-                _settingRow(Icons.person_rounded,        'My Profile'),
-                _settingRow(Icons.lock_rounded,          'Change Password',
+                _settingRow(Icons.lock_rounded, 'Change Password',
                     onTap: () => _showChangePasswordDialog(context)),
-                _settingRow(Icons.notifications_rounded, 'Notifications'),
-                _settingRow(Icons.bar_chart_rounded,     'My Statistics'),
                 const Divider(color: ArrestoColors.line),
                 _settingRow(Icons.logout_rounded, 'Logout',
                     color: ArrestoColors.red,

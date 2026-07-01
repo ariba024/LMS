@@ -40,6 +40,15 @@ class Course {
   final bool certified;
   final String code;
   final List<Module> modules;
+  // Generation requirements (saved when course was generated)
+  final String language;
+  final String difficulty;
+  final String courseFormat;
+  final String durationRange;
+  final String instructions;
+  final String userInstructions;
+  final bool useKnowledgeBase;
+  final String sourceFile;
 
   const Course({
     required this.id,
@@ -57,5 +66,41 @@ class Course {
     required this.certified,
     required this.code,
     this.modules = const [],
+    this.language = '',
+    this.difficulty = '',
+    this.courseFormat = '',
+    this.durationRange = '',
+    this.instructions = '',
+    this.userInstructions = '',
+    this.useKnowledgeBase = false,
+    this.sourceFile = '',
   });
+
+  Course copyWith({int? progress, int? lessons, int? mins}) {
+    return Course(
+      id: id,
+      title: title,
+      desc: desc,
+      cat: cat,
+      style: style,
+      status: status,
+      level: level,
+      lessons: lessons ?? this.lessons,
+      mins: mins ?? this.mins,
+      progress: progress ?? this.progress,
+      learners: learners,
+      rating: rating,
+      certified: certified,
+      code: code,
+      modules: modules,
+      language: language,
+      difficulty: difficulty,
+      courseFormat: courseFormat,
+      durationRange: durationRange,
+      instructions: instructions,
+      userInstructions: userInstructions,
+      useKnowledgeBase: useKnowledgeBase,
+      sourceFile: sourceFile,
+    );
+  }
 }

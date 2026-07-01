@@ -37,7 +37,7 @@ ThemeData buildArrestoTheme() {
       labelSmall: GoogleFonts.inter(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: ArrestoColors.orange),
+          color: ArrestoColors.amber),
     ),
     cardTheme: CardThemeData(
       color: ArrestoColors.surface,
@@ -65,11 +65,11 @@ ThemeData buildArrestoTheme() {
         borderSide: const BorderSide(color: ArrestoColors.amber, width: 1.5),
       ),
       hintStyle: GoogleFonts.inter(
-          fontSize: 14, color: ArrestoColors.textMuted2),
+          fontSize: 14, color: ArrestoColors.textMuted),
     ),
     dividerColor: ArrestoColors.line,
     appBarTheme: AppBarTheme(
-      backgroundColor: ArrestoColors.surface,
+      backgroundColor: ArrestoColors.background,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleTextStyle: GoogleFonts.inter(

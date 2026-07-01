@@ -5,12 +5,14 @@ import '../../core/services/api_client.dart';
 import '../../core/services/assessment_service.dart';
 import '../../core/services/course_service.dart';
 import '../../core/services/document_service.dart';
-import '../../core/services/learner_service.dart';
+import '../../core/services/attention_service.dart' show AttentionService, LessonAttentionStat;
+import '../../core/services/learner_service.dart' show LearnerService, LearnerCourseStat, ProfileData;
 import '../../core/services/notification_service.dart';
 import '../../core/services/progress_service.dart';
 import '../../core/services/tutor_service.dart';
 import '../../core/services/video_service.dart';
 import '../models/course.dart';
+import '../models/gamification.dart' show LearnerGamificationStats;
 import '../models/learner.dart';
 import '../models/lesson.dart' show CourseLesson;
 import '../models/notification_model.dart';
@@ -228,10 +230,11 @@ final profileProvider =
   (ref, learnerId) => LearnerService.getProfile(learnerId),
 );
 
-// ── Admin: learners list ──────────────────────────────────────────────────────
+// ── Admin: learners list (family keyed on search query) ───────────────────────
+// Pass empty string for unfiltered. Backend applies SQL ILIKE search.
 final learnersApiProvider =
-    FutureProvider.autoDispose<List<Learner>>(
-  (ref) => LearnerService.listLearners(),
+    FutureProvider.autoDispose.family<List<Learner>, String>(
+  (ref, q) => LearnerService.listLearners(q: q),
 );
 
 // ── Admin: single learner detail ──────────────────────────────────────────────
@@ -240,10 +243,46 @@ final learnerDetailApiProvider =
   (ref, learnerId) => LearnerService.getLearnerDetail(learnerId),
 );
 
+// ── Admin: per-course breakdown for one learner ───────────────────────────────
+final learnerCoursesProvider =
+    FutureProvider.autoDispose.family<List<LearnerCourseStat>, String>(
+  (ref, learnerId) => LearnerService.getLearnerCourses(learnerId),
+);
+
+// ── Admin: per-lesson attention summary for one learner ──────────────────────
+final learnerAttentionProvider =
+    FutureProvider.autoDispose.family<List<LessonAttentionStat>, String>(
+  (ref, learnerId) async {
+    try {
+      return await AttentionService.getSummary(learnerId);
+    } catch (_) {
+      return const [];
+    }
+  },
+);
+
 // ── Analytics overview ────────────────────────────────────────────────────────
 final analyticsOverviewProvider =
     FutureProvider.autoDispose<AnalyticsOverview>(
   (ref) => AnalyticsService.getOverview(),
+);
+
+// ── Per-course analytics ──────────────────────────────────────────────────────
+final courseStatsProvider =
+    FutureProvider.autoDispose<List<CourseStatItem>>(
+  (ref) => AnalyticsService.getCourseStats(),
+);
+
+// ── AI Tutor analytics ────────────────────────────────────────────────────────
+final tutorStatsProvider =
+    FutureProvider.autoDispose<TutorStats>(
+  (ref) => AnalyticsService.getTutorStats(),
+);
+
+// ── Learner engagement funnel ─────────────────────────────────────────────────
+final funnelProvider =
+    FutureProvider.autoDispose<List<FunnelStep>>(
+  (ref) => AnalyticsService.getFunnel(),
 );
 
 // ── Notifications (real API) ──────────────────────────────────────────────────
@@ -253,6 +292,90 @@ final notificationsProvider =
     FutureProvider.autoDispose.family<List<NotificationModel>, String>(
   (ref, recipientId) => NotificationService.list(recipientId),
 );
+
+// ── Course progress summary for current learner ──────────────────────────────
+// Maps course_id → percent complete (0–100).
+// Calls GET /api/v1/progress/me/summary — falls back to empty map on error.
+final courseProgressSummaryProvider = FutureProvider.autoDispose<Map<String, int>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/progress/me/summary');
+    final data = resp.data as Map<String, dynamic>;
+    return data.map((k, v) => MapEntry(k, (v['percent'] as num).toInt()));
+  } catch (_) {
+    return const <String, int>{};
+  }
+});
+
+// ── Enrolled course IDs for the current learner ──────────────────────────────
+// Calls GET /api/v1/learners/me/enrolled-courses — returns the set of course_ids
+// that have at least one lesson_record row. Falls back to empty set on error so
+// My Courses degrades gracefully when the endpoint is unavailable.
+final enrolledCourseIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/learners/me/enrolled-courses');
+    final ids = (resp.data['course_ids'] as List).cast<String>();
+    return ids.toSet();
+  } catch (_) {
+    return const <String>{};
+  }
+});
+
+// ── Learner gamification aggregate stats ─────────────────────────────────────
+// Calls GET /api/v1/gamification/me/stats — returns max streak, total XP,
+// and total lessons completed across all courses. Falls back to zeroes on error.
+final gamificationStatsProvider =
+    FutureProvider.autoDispose<LearnerGamificationStats>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/gamification/me/stats');
+    return LearnerGamificationStats.fromJson(
+        resp.data as Map<String, dynamic>);
+  } catch (_) {
+    return const LearnerGamificationStats(
+        maxStreak: 0, totalXp: 0, totalLessonsCompleted: 0);
+  }
+});
+
+// ── Admin: course generation jobs ────────────────────────────────────────────
+// Calls GET /api/v1/courses/jobs — returns up to 10 most recent jobs.
+// Each job: {job_id, status, title, progress (0–1), started_at}.
+class CourseJob {
+  final String jobId;
+  final String status; // pending | running | completed | failed
+  final String title;
+  final double progress; // 0–1
+  final String? sourceFile;
+  final String? error;
+
+  const CourseJob({
+    required this.jobId,
+    required this.status,
+    required this.title,
+    required this.progress,
+    this.sourceFile,
+    this.error,
+  });
+
+  factory CourseJob.fromJson(Map<String, dynamic> j) => CourseJob(
+        jobId: j['job_id'] as String,
+        status: j['status'] as String,
+        title: j['title'] as String? ?? 'Untitled',
+        progress: (j['progress'] as num).toDouble(),
+        sourceFile: j['source_file'] as String?,
+        error: j['error'] as String?,
+      );
+}
+
+final courseJobsProvider =
+    FutureProvider.autoDispose<List<CourseJob>>((ref) async {
+  try {
+    final resp = await apiClient.get('/api/v1/courses/jobs');
+    return (resp.data as List)
+        .map((e) => CourseJob.fromJson(e as Map<String, dynamic>))
+        .toList();
+  } catch (_) {
+    return const [];
+  }
+});
 
 // ── Adaptive recommendations for a course ────────────────────────────────────
 // Derived from weak_topics and lesson checkpoint scores. Returns an empty list

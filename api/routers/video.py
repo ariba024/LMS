@@ -3,6 +3,7 @@ api/routers/video.py
 
 POST   /api/v1/video/render                       Trigger video render for a lesson or slide item
 GET    /api/v1/video/renders/{render_id}           Poll render job status
+DELETE /api/v1/video/renders/{render_id}           Delete a completed or failed render job
 GET    /api/v1/video/renders/{render_id}/download  Stream the rendered MP4
 GET    /api/v1/video/scripts/{script_id}/renders   List all renders for a course script
 GET    /api/v1/video/languages                     Supported languages + TTS engine per lang
@@ -17,12 +18,14 @@ from pathlib import Path
 
 import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from api.config import settings
 from api.course_library import library
+from api.db import get_db
 from api.dependencies import get_current_user, require_admin
 from modules.video.job_store import video_job_store
 from modules.video.render_engine import (
@@ -66,6 +69,47 @@ def _resolve_lang(requested_lang: str, record: dict) -> str:
     return _LANG_NAME_TO_CODE.get(stored, requested_lang)
 
 router = APIRouter(prefix="/api/v1/video", tags=["Video Rendering"])
+
+# ── Auth helper for the download endpoint ─────────────────────────────────────
+# The /download endpoint must be openable directly in a browser tab (no custom
+# headers), so it accepts the JWT as an optional ?token= query param in addition
+# to the standard Authorization: Bearer header.
+
+_video_bearer = HTTPBearer(auto_error=False)
+
+
+def _get_download_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_video_bearer),
+    token: str | None = Query(None, include_in_schema=False),
+    db=Depends(get_db),
+):
+    from api.dependencies import _DEV_AUTH_BYPASS
+    if _DEV_AUTH_BYPASS:
+        from api.models.users import UserRow
+        return UserRow(id="dev-admin", email="dev@arresto.in",
+                       password_hash="", role="admin", is_active=True)
+
+    from jose import JWTError
+    from api.auth import decode_token
+    from api.models.users import UserRow
+
+    _401 = HTTPException(status_code=401, detail="Not authenticated.")
+    raw = (credentials.credentials if credentials else None) or token
+    if not raw:
+        raise _401
+    try:
+        payload = decode_token(raw)
+        if payload.get("type") != "access":
+            raise _401
+        user_id: str = payload.get("sub", "")
+        if not user_id:
+            raise _401
+    except JWTError:
+        raise _401
+    user = db.get(UserRow, user_id)
+    if user is None or not user.is_active:
+        raise _401
+    return user
 
 
 # ── Request / response schemas ─────────────────────────────────────────────────
@@ -300,6 +344,13 @@ async def generate_all_videos(
     Style defaults to `modern` (free animated renderer).
     Pass style=animated_scene to use HeyGen (requires HEYGEN_API_KEY in .env).
     """
+    if style == "none":
+        raise HTTPException(
+            400,
+            "style='none' is not a valid render style. "
+            "Choose: modern, animated_scene, whiteboard_doodle, hybrid.",
+        )
+
     if style in _HEYGEN_STYLES and not settings.heygen_api_key:
         raise HTTPException(
             400,
@@ -418,7 +469,7 @@ def get_render_status(render_id: str, _=Depends(get_current_user)):
 
 
 @router.get("/renders/{render_id}/stream")
-def stream_video(render_id: str, request: Request, _=Depends(get_current_user)):
+def stream_video(render_id: str, request: Request, _=Depends(_get_download_user)):
     """
     Stream the rendered MP4 for inline <video> playback.
     Supports HTTP Range requests (206 Partial Content) so the Flutter
@@ -588,7 +639,7 @@ def stream_lesson_video(script_id: str, lesson_ref: str, request: Request, _=Dep
 
 
 @router.get("/renders/{render_id}/download")
-def download_video(render_id: str, _=Depends(get_current_user)):
+def download_video(render_id: str, _=Depends(_get_download_user)):
     """
     Download the rendered MP4 as a file attachment.
     """
@@ -622,6 +673,17 @@ def list_script_renders(script_id: str, _=Depends(get_current_user)):
         "renders":   [_job_to_status(j) for j in jobs],
         "total":     len(jobs),
     }
+
+
+@router.delete("/renders/{render_id}", status_code=204)
+def delete_render(render_id: str, _=Depends(require_admin)):
+    """Delete a completed or failed render job. Active (pending/processing) jobs cannot be deleted."""
+    job = video_job_store.get(render_id)
+    if not job:
+        raise HTTPException(404, f"Render '{render_id}' not found.")
+    if job.status in ("pending", "processing"):
+        raise HTTPException(409, "Cannot delete an active render job — wait for it to complete or fail first.")
+    video_job_store.delete(render_id)
 
 
 @router.get("/heygen-credits")

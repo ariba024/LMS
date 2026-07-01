@@ -448,7 +448,7 @@ class _QuestionCardState extends State<_QuestionCard> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: active ? ArrestoColors.ink : ArrestoColors.textMuted,
+                          color: active ? ArrestoColors.textPrimary : ArrestoColors.textMuted,
                         )),
                   ],
                 ),

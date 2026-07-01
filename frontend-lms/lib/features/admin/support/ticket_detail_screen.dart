@@ -27,6 +27,14 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     super.dispose();
   }
 
+  Color _priorityColor(String priority) => switch (priority) {
+        'Low'    => ArrestoColors.textMuted,
+        'Medium' => ArrestoColors.blue,
+        'High'   => ArrestoColors.orange,
+        'Urgent' => ArrestoColors.red,
+        _        => ArrestoColors.textMuted,
+      };
+
   Future<void> _sendReply(String ticketId) async {
     final body = _replyCtrl.text.trim();
     if (body.isEmpty) return;
@@ -45,13 +53,32 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       backgroundColor: ArrestoColors.background,
       appBar: AppBar(
         backgroundColor: ArrestoColors.surface,
-        foregroundColor: ArrestoColors.ink,
+        foregroundColor: ArrestoColors.textPrimary,
         title: Text(ticket.id, style: ArrestoText.h4()),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
         actions: [
+          DropdownButton<String>(
+            value: ticket.priority,
+            underline: const SizedBox(),
+            icon: const Icon(Icons.flag_rounded, size: 16),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: _priorityColor(ticket.priority),
+            ),
+            items: const ['Low', 'Medium', 'High', 'Urgent']
+                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                .toList(),
+            onChanged: (p) {
+              if (p != null) {
+                ref.read(ticketsProvider.notifier).updatePriority(ticket.id, p);
+              }
+            },
+          ),
+          const SizedBox(width: 8),
           DropdownButton<String>(
             value: ticket.status,
             underline: const SizedBox(),
